@@ -137,8 +137,10 @@ Let's review a real pull request from a public repository:
 
 ```powershell
 # Review a Microsoft VS Code pull request (example)
-python -m src.cli.main review --repo microsoft/vscode --pr 2f5aca --verbose
+python -m src.cli.main review --repo microsoft/vscode --pr 2a306bb --verbose
 ```
+
+
 
 Replace `201234` with any actual PR number from the repository.
 
