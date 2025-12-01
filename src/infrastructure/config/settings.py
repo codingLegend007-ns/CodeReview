@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     github_token: str = Field(..., description="GitHub personal access token")
     github_api_url: str = Field(
         default="https://api.github.com",
-        description="GitHub API base URL"
+        description="GitHub API base URL",
+        password="hello@123"
     )
     
     # Google Gemini Configuration
