@@ -280,6 +280,10 @@ footer a { color: var(--accent); }
         Gemini API Key
         <input id="geminiKey" type="password" placeholder="AIzaSy***********" autocomplete="off" />
       </label>
+      <label>
+  Gemini Model (optional)
+  <input id="geminiModel" type="text" value="gemini-2.5-flash" placeholder="gemini-2.5-flash" autocomplete="off" />
+      </label>
       <div class="status-line">
         <span class="status-chip" id="credStatus">Status: Not validated</span>
       </div>
@@ -343,9 +347,25 @@ footer a { color: var(--accent); }
 /* =========================
    Utility & State
    ========================= */
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL_ALIASES = {
+  'gemini-1.5-flash': 'gemini-2.5-flash',
+  'gemini-1.5-flash-latest': 'gemini-2.5-flash',
+  'gemini-1.5-pro': 'gemini-2.0-flash',
+  'gemini-1.5-pro-latest': 'gemini-2.0-flash',
+  '1.5-flash': 'gemini-2.5-flash',
+  '1.5-pro': 'gemini-2.0-flash',
+  'gemini-2.0-flash-latest': 'gemini-2.0-flash',
+  'gemini-flash-latest': 'gemini-2.5-flash',
+  'gemini-flash': 'gemini-2.5-flash',
+  'flash': 'gemini-2.5-flash',
+  'pro': 'gemini-2.0-flash',
+};
+
 const els = {
   ghToken: document.getElementById('ghToken'),
   geminiKey: document.getElementById('geminiKey'),
+  geminiModel: document.getElementById('geminiModel'),
   repoOwner: document.getElementById('repoOwner'),
   repoName: document.getElementById('repoName'),
   maxFiles: document.getElementById('maxFiles'),
@@ -363,10 +383,32 @@ const els = {
 let PRS = [];             // Fetched PR metadata
 let REVIEW_RESULTS = {};  // Map PR number -> review details
 
+if (els.geminiModel && !els.geminiModel.value) {
+  els.geminiModel.value = DEFAULT_GEMINI_MODEL;
+}
+
 function sanitize(str) {
   // Basic sanitation to avoid injection into HTML
   return (str ?? '')
     .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function normalizeGeminiModel(modelName) {
+  const trimmed = (modelName || '').trim();
+  if (!trimmed) return DEFAULT_GEMINI_MODEL;
+
+  const withoutPrefix = trimmed.replace(/^models\//i, '');
+  const lower = withoutPrefix.toLowerCase();
+
+  if (GEMINI_MODEL_ALIASES[lower]) {
+    return GEMINI_MODEL_ALIASES[lower];
+  }
+
+  if (lower.startsWith('gemini-1.5-') && !lower.endsWith('-latest')) {
+    return `${lower}-latest`;
+  }
+
+  return lower;
 }
 
 function setLoading(elButton, elLoader, loading) {
@@ -532,6 +574,11 @@ async function callGeminiReview(prNumber, prTitle, fileDiffs) {
   const apiKey = els.geminiKey.value.trim();
   if (!apiKey) throw new Error('Gemini API key missing.');
 
+  const model = normalizeGeminiModel(els.geminiModel?.value);
+  if (els.geminiModel) {
+    els.geminiModel.value = model;
+  }
+
   // Structured prompt instructions
   const systemInstructions = `
 You are an expert senior software engineer performing a code review.
@@ -567,16 +614,20 @@ ${f.patch}
 `).join('\n')}
 `;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   const body = {
+    systemInstruction: {
+      role: "system",
+      parts: [{ text: systemInstructions.trim() }]
+    },
     contents: [
-      { role: "user", parts: [{ text: systemInstructions }] },
       { role: "user", parts: [{ text: userContent }] }
     ],
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 1400
+      maxOutputTokens: 4096,
+      responseMimeType: "application/json"
     }
   };
 
@@ -592,9 +643,32 @@ ${f.patch}
   }
 
   const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  if (!text) throw new Error('Empty AI response.');
-  return text.trim();
+  const candidate = data?.candidates?.[0];
+
+  if (!candidate) {
+    const blockReason = data?.promptFeedback?.blockReason;
+    throw new Error(blockReason ? `Gemini returned no candidates (block reason: ${blockReason})` : 'Gemini returned no candidates.');
+  }
+
+  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+  const text = parts
+    .map(part => (typeof part?.text === 'string' ? part.text : '')
+      .trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    const finish = candidate.finishReason || 'unknown';
+    const blockReason = data?.promptFeedback?.blockReason;
+    const reasons = blockReason ? ` Block reason: ${blockReason}.` : '';
+    const mitigation = finish === 'MAX_TOKENS'
+      ? ' Try lowering "Max Files Per PR" / "Max Diff Chars Per File" or switch to a more capable Gemini model.'
+      : '';
+    throw new Error(`Empty AI response (finish reason: ${finish}).${reasons}${mitigation}`.trim());
+  }
+
+  return text;
 }
 
 function parseGeminiResponse(raw) {
@@ -678,7 +752,7 @@ function appendOrReplace(id, html) {
 }
 
 /* Re-enable buttons when inputs change */
-['ghToken','geminiKey'].forEach(id => {
+['ghToken','geminiKey','geminiModel'].forEach(id => {
   els[id].addEventListener('input', enableActions);
 });
 </script>

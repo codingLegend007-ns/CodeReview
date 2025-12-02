@@ -15,23 +15,35 @@ class GeminiProvider(LLMProvider):
     
     # Model context lengths
     MODEL_CONTEXT_LENGTHS = {
-        "gemini-pro": 32768,
-        "gemini-1.5-pro-latest": 1048576,  # 1M tokens
-        "gemini-1.5-flash-latest": 1048576,
-        "gemini-1.5-flash": 1048576,
-        "gemini-1.5-pro": 1048576,
+    "gemini-pro": 32768,
+    "gemini-1.5-pro-latest": 1048576,  # 1M tokens
+    "gemini-1.5-flash-latest": 1048576,
+    "gemini-1.5-flash": 1048576,
+    "gemini-1.5-pro": 1048576,
+    "gemini-2.0-flash": 1048576,
+    "gemini-2.0-flash-001": 1048576,
+    "gemini-2.0-pro": 1048576,
+    "gemini-2.0-pro-exp": 1048576,
+    "gemini-2.5-flash": 1048576,
+    "gemini-2.5-flash-preview": 1048576,
     }
 
     MODEL_ALIASES = {
-        "gemini-1.5-flash": "gemini-1.5-flash-latest",
-        "gemini-1.5-pro": "gemini-1.5-pro-latest",
-        "1.5-flash": "gemini-1.5-flash-latest",
-        "1.5-pro": "gemini-1.5-pro-latest",
-        "flash": "gemini-1.5-flash-latest",
-        "pro": "gemini-1.5-pro-latest",
+    "gemini-1.5-flash": "gemini-2.5-flash",
+    "gemini-1.5-flash-latest": "gemini-2.5-flash",
+    "gemini-1.5-pro": "gemini-2.0-pro",
+    "gemini-1.5-pro-latest": "gemini-2.0-pro",
+    "gemini-2.0-flash-latest": "gemini-2.0-flash",
+    "gemini-2.0-pro-latest": "gemini-2.0-pro",
+    "gemini-flash-latest": "gemini-2.5-flash",
+    "gemini-pro-latest": "gemini-2.0-pro",
+    "1.5-flash": "gemini-2.5-flash",
+    "1.5-pro": "gemini-2.0-pro",
+    "flash": "gemini-2.5-flash",
+    "pro": "gemini-2.0-pro",
     }
 
-    DEFAULT_MODEL = "gemini-1.5-pro-latest"
+    DEFAULT_MODEL = "gemini-2.5-flash"
     
     def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", **kwargs):
         """Initialize Gemini provider."""
@@ -52,12 +64,18 @@ class GeminiProvider(LLMProvider):
         if not model_name:
             return cls.DEFAULT_MODEL
         candidate = model_name.strip()
-        alias = cls.MODEL_ALIASES.get(candidate.lower())
+        lower_candidate = candidate.lower()
+
+        if lower_candidate.startswith("models/"):
+            candidate = candidate.split("/", 1)[1]
+            lower_candidate = candidate.lower()
+
+        alias = cls.MODEL_ALIASES.get(lower_candidate)
         if alias:
             return alias
-        if candidate.startswith("gemini-1.5-") and not candidate.endswith("-latest"):
-            return f"{candidate}-latest"
-        return candidate
+        if lower_candidate.startswith("gemini-1.5-") and not lower_candidate.endswith("-latest"):
+            return f"{lower_candidate}-latest"
+        return lower_candidate
     
     def _validate(self):
         """Validate model configuration."""
