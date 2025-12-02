@@ -1,6 +1,8 @@
 """Command-line interface for code review agent."""
 
 import sys
+from typing import Optional
+
 import click
 from rich.console import Console
 from rich.panel import Panel
@@ -10,8 +12,76 @@ from ..infrastructure.config.settings import get_settings
 from ..infrastructure.github.client import GitHubClient
 from ..infrastructure.llm.factory import LLMProviderFactory
 from ..infrastructure.exceptions import CodeReviewError
+from ..orchestration.orchestrator import ReviewOrchestrator, create_crewai_llm
 
 console = Console()
+
+
+def _perform_basic_review(
+    llm_provider,
+    pull_request,
+    verbose: bool,
+    max_files: int,
+):
+    """Fallback simple review when multi-agent workflow is unavailable."""
+
+    console.print("[bold yellow]🔍 Performing basic single-agent code review...[/bold yellow]\n")
+
+    issues_found = []
+    significant_changes = pull_request.significant_changes[:max_files]
+
+    for change in significant_changes:
+        with console.status(f"[green]Analyzing {change.filename}..."):
+            if not change.patch or len(change.patch) >= 2000:
+                continue
+
+            prompt = f"""Review the following code change and identify potential issues:
+
+File: {change.filename}
+Language: {change.language or 'unknown'}
+
+Changes:
+{change.patch[:1500]}
+
+Please identify:
+1. Code quality issues
+2. Potential bugs
+3. Security concerns
+4. Performance issues
+5. Best practice violations
+
+Provide a concise analysis."""
+
+            try:
+                analysis = llm_provider.generate(prompt, temperature=0.3, max_tokens=500)
+                issues_found.append({
+                    "file": change.filename,
+                    "analysis": analysis,
+                })
+            except Exception as error:
+                if verbose:
+                    console.print(f"[red]Error analyzing {change.filename}: {error}[/red]")
+
+    return issues_found
+
+
+def _render_basic_results(issues_found, pull_request):
+    """Render results for the fallback basic review."""
+
+    console.print("\n[bold green]✅ Review Complete![/bold green]\n")
+
+    console.print(Panel.fit(
+        f"[bold]Review Summary[/bold]\n\n"
+        f"Files Analyzed: {len(issues_found)}\n"
+        f"Total Files: {len(pull_request.significant_changes)}",
+        border_style="green"
+    ))
+
+    for item in issues_found:
+        console.print(f"\n[bold cyan]📄 {item['file']}[/bold cyan]")
+        console.print(
+            item['analysis'][:500] + "..." if len(item['analysis']) > 500 else item['analysis']
+        )
 
 
 @click.group()
@@ -69,68 +139,83 @@ def review(repo: str, pr: int, provider: str, verbose: bool, output_format: str,
             if len(pull_request.significant_changes) > 10:
                 console.print(f"  ... and {len(pull_request.significant_changes) - 10} more\n")
         
-        # Initialize LLM
+        # Initialize LLMs
+        crew_llm = None
+        crew_llm_error: Optional[Exception] = None
         with console.status("[bold green]Initializing LLM provider..."):
             llm_config = settings.get_llm_config()
             llm_provider = LLMProviderFactory.create(
                 llm_config["provider"],
                 llm_config["api_key"],
-                llm_config["model"]
+                llm_config.get("model")
             )
+            try:
+                crew_llm = create_crewai_llm(
+                    llm_config,
+                    temperature=0.15,
+                )
+            except Exception as error:
+                crew_llm_error = error
         
         console.print(f"✓ LLM initialized: {llm_provider}\n")
-        
-        # Simple review demo (without CrewAI agents for now)
-        console.print("[bold yellow]🔍 Performing basic code review...[/bold yellow]\n")
-        
-        issues_found = []
-        
-        for change in pull_request.significant_changes[:5]:  # Limit for demo
-            with console.status(f"[green]Analyzing {change.filename}..."):
-                if change.patch and len(change.patch) < 2000:
-                    # Create simple review prompt
-                    prompt = f"""Review the following code change and identify potential issues:
 
-File: {change.filename}
-Language: {change.language or 'unknown'}
+        fallback_limit = max(1, min(5, settings.max_files_per_review or 5))
 
-Changes:
-{change.patch[:1500]}
+        if crew_llm is None:
+            console.print(f"[yellow]⚠️ Multi-agent workflow unavailable: {crew_llm_error}[/yellow]")
+            issues_found = _perform_basic_review(
+                llm_provider,
+                pull_request,
+                verbose,
+                fallback_limit,
+            )
+            _render_basic_results(issues_found, pull_request)
+            return
 
-Please identify:
-1. Code quality issues
-2. Potential bugs
-3. Security concerns
-4. Performance issues
-5. Best practice violations
+        console.print("[bold yellow]🤝 Launching multi-agent review workflow...[/bold yellow]\n")
 
-Provide a concise analysis."""
-                    
-                    try:
-                        analysis = llm_provider.generate(prompt, temperature=0.3, max_tokens=500)
-                        issues_found.append({
-                            "file": change.filename,
-                            "analysis": analysis
-                        })
-                    except Exception as e:
-                        console.print(f"[red]Error analyzing {change.filename}: {e}[/red]")
-        
-        # Display results
-        console.print("\n[bold green]✅ Review Complete![/bold green]\n")
-        
+        try:
+            orchestrator = ReviewOrchestrator(
+                crew_llm,
+                verbose=verbose or settings.verbose,
+            )
+            review_outcome = orchestrator.run_review(
+                pull_request,
+                max_files=settings.max_files_per_review,
+            )
+        except Exception as orchestrator_error:
+            console.print(f"[yellow]⚠️ Multi-agent workflow unavailable: {orchestrator_error}[/yellow]")
+            if verbose:
+                import traceback
+                console.print(traceback.format_exc())
+            issues_found = _perform_basic_review(
+                llm_provider,
+                pull_request,
+                verbose,
+                fallback_limit,
+            )
+            _render_basic_results(issues_found, pull_request)
+            return
+
+        metadata = review_outcome.get("metadata", {})
+        sections = review_outcome.get("sections", [])
+
+        console.print("[bold green]✅ Review Complete![/bold green]\n")
+
         console.print(Panel.fit(
             f"[bold]Review Summary[/bold]\n\n"
-            f"Files Analyzed: {len(issues_found)}\n"
-            f"Total Files: {len(pull_request.significant_changes)}",
+            f"Files Analyzed: {metadata.get('files_analyzed', len(pull_request.significant_changes))}\n"
+            f"Total Files: {metadata.get('files_available', len(pull_request.significant_changes))}\n"
+            f"Agents Run: {', '.join(metadata.get('agents_run', [])) or 'Code Review Agent'}",
             border_style="green"
         ))
-        
-        # Display findings
-        for item in issues_found:
-            console.print(f"\n[bold cyan]📄 {item['file']}[/bold cyan]")
-            console.print(item['analysis'][:500] + "..." if len(item['analysis']) > 500 else item['analysis'])
-        
-        console.print("\n[bold]💡 Note:[/bold] This is a basic demo. Full agent-based review coming soon!")
+
+        for section in sections:
+            label = section.get("label") or section.get("key", "Agent Output")
+            output_text = section.get("output") or "[italic]No output produced.[/italic]"
+            console.print(Panel(str(output_text).strip(), title=label, border_style="cyan"))
+
+        console.print("\n[dim]ℹ️ Powered by CrewAI multi-agent workflow.[/dim]")
         
     except CodeReviewError as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}", style="red")

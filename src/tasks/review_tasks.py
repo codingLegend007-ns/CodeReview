@@ -1,8 +1,22 @@
 """Tasks for CrewAI agents."""
 
-from crewai import Task
-from typing import Dict, Any, List
+import textwrap
+from typing import Any, Dict, List, TYPE_CHECKING
+
+try:
+    from crewai import Task
+except ImportError as import_error:  # pragma: no cover - defensive import
+    Task = None
+    _TASK_IMPORT_ERROR = import_error
+else:
+    _TASK_IMPORT_ERROR = None
+
 from ..core.entities import PullRequest, CodeChange
+
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from crewai import Task as CrewTaskType
+else:
+    CrewTaskType = Any
 
 
 def create_code_review_task(
@@ -10,7 +24,7 @@ def create_code_review_task(
     pull_request: PullRequest,
     code_changes: List[CodeChange],
     context: Dict[str, Any] = None
-) -> Task:
+) -> "CrewTaskType":
     """
     Create a code review task.
     
@@ -53,6 +67,11 @@ def create_code_review_task(
     4. Priority order for fixes
     """
     
+    if Task is None:
+        raise ImportError(
+            "crewai package is required to build review tasks."
+        ) from _TASK_IMPORT_ERROR
+
     return Task(
         description=description,
         expected_output=expected_output,
@@ -65,8 +84,12 @@ def create_security_analysis_task(
     pull_request: PullRequest,
     code_changes: List[CodeChange],
     context: Dict[str, Any] = None
-) -> Task:
+) -> "CrewTaskType":
     """Create a security analysis task."""
+    if Task is None:
+        raise ImportError(
+            "crewai package is required to build review tasks."
+        ) from _TASK_IMPORT_ERROR
     description = f"""
     Perform security analysis on pull request #{pull_request.number}.
     
@@ -101,8 +124,12 @@ def create_performance_analysis_task(
     pull_request: PullRequest,
     code_changes: List[CodeChange],
     context: Dict[str, Any] = None
-) -> Task:
+) -> "CrewTaskType":
     """Create a performance analysis task."""
+    if Task is None:
+        raise ImportError(
+            "crewai package is required to build review tasks."
+        ) from _TASK_IMPORT_ERROR
     description = f"""
     Analyze pull request #{pull_request.number} for performance issues.
     
@@ -134,23 +161,43 @@ def create_suggestion_generation_task(
     agent: any,
     review_results: Dict[str, Any],
     context: Dict[str, Any] = None
-) -> Task:
+) -> "CrewTaskType":
     """Create a suggestion generation task."""
+    if Task is None:
+        raise ImportError(
+            "crewai package is required to build review tasks."
+        ) from _TASK_IMPORT_ERROR
+    summary_sections: List[str] = []
+    for name, output in review_results.items():
+        if not output:
+            continue
+        title = name.replace("_", " ").title()
+        formatted_output = (
+            output if len(output) <= 1200
+            else textwrap.shorten(output, width=1200, placeholder="... [truncated]")
+        )
+        summary_sections.append(f"### {title}\n{formatted_output}")
+
+    prior_findings = "\n\n".join(summary_sections) if summary_sections else "No prior findings were provided."
+
     description = f"""
     Based on the review results, generate actionable improvement suggestions.
-    
+
+    Prior analyses:
+    {prior_findings}
+
     Consolidate findings from:
     - Code quality review
     - Security analysis
     - Performance analysis
-    
+
     Generate:
     1. Prioritized list of improvements
     2. Specific implementation guidance
     3. Code examples where applicable
     4. Estimated effort for each suggestion
     """
-    
+
     expected_output = """
     Structured improvement plan with:
     1. Top 5 critical improvements
@@ -158,9 +205,10 @@ def create_suggestion_generation_task(
     3. Implementation examples
     4. Priority and effort estimates
     """
-    
+
     return Task(
         description=description,
         expected_output=expected_output,
         agent=agent,
+        context=context,
     )

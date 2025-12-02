@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AI GitHub PR Code Review – Gemini Powered</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+:root {
+  --bg: #0f1115;
+  --panel: #1c1f24;
+  --panel-alt: #22262c;
+  --border: #2d333b;
+  --accent: #4ea1ff;
+  --accent-alt: #2b8de2;
+  --danger: #ff4d4d;
+  --warn: #ffbe3d;
+  --ok: #42c980;
+  --font-stack: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 4px 14px rgba(0,0,0,0.4);
+  --text: #e5e9ef;
+  --text-dim: #9aa1ab;
+  --code-bg: #15171b;
+  --mono: "Consolas","SFMono-Regular","Courier New",monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-stack);
+  margin: 0;
+  line-height: 1.5;
+}
+h1,h2,h3 { font-weight: 600; letter-spacing: .5px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 5rem;
+}
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+header h1 { margin: 0; font-size: clamp(1.8rem,5vw,2.4rem); }
+header p { margin: 0; color: var(--text-dim); max-width: 780px; }
+
+.grid-setup {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+  margin-bottom: 1rem;
+}
+.card {
+  background: var(--panel);
+  padding: 1rem 1.1rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  position: relative;
+}
+.card h2, .card h3 { margin: 0 0 .25rem; font-size: 1.05rem; letter-spacing: .3px; }
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  gap: .4rem;
+}
+input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  padding: .55rem .7rem;
+  border-radius: var(--radius-sm);
+  font-size: .95rem;
+  color: var(--text);
+  font-family: var(--mono);
+}
+input:focus {
+  outline: 2px solid var(--accent-alt);
+  border-color: var(--accent-alt);
+}
+button {
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: .7rem 1.1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: .95rem;
+  letter-spacing: .5px;
+  transition: background .18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+button:hover { background: var(--accent-alt); }
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+.actions {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: .5rem;
+}
+.status-line {
+  font-size: .8rem;
+  color: var(--text-dim);
+  display: flex;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+.status-chip {
+  background: var(--panel-alt);
+  padding: .35rem .6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+#prList, #reviews {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.pr-item, .review-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: .9rem .95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  position: relative;
+}
+
+.pr-item h3, .review-item h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+}
+.meta-line {
+  font-size: .7rem;
+  color: var(--text-dim);
+  letter-spacing: .5px;
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.review-comments {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+.comment-card {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  padding: .65rem .75rem .75rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+
+.comment-card h4 {
+  margin: 0;
+  font-size: .9rem;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: .4px;
+}
+
+.badge {
+  padding: .2rem .45rem;
+  background: var(--accent-alt);
+  color: #fff;
+  font-size: .65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  letter-spacing: .5px;
+}
+
+.suggestion {
+  font-family: var(--mono);
+  font-size: .75rem;
+  background: var(--code-bg);
+  padding: .55rem .65rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  line-height: 1.35;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+
+.error-box {
+  border-left: 4px solid var(--danger);
+  background: #2a1c1e;
+  padding: .75rem .9rem;
+  border-radius: var(--radius-sm);
+  font-size: .8rem;
+  line-height: 1.4;
+  color: #ffbaba;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.success-box {
+  border-left: 4px solid var(--ok);
+  background: #1e2a24;
+  padding: .7rem .85rem;
+  border-radius: var(--radius-sm);
+  font-size: .75rem;
+  color: #d2ffe9;
+}
+
+.loader {
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--panel-alt);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+footer {
+  margin-top: 3rem;
+  padding: 2.5rem 1rem 3.5rem;
+  text-align: center;
+  font-size: .7rem;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+}
+footer a { color: var(--accent); }
+
+@media (max-width: 680px) {
+  .actions { flex-direction: column; }
+  button { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AI GitHub Pull Request Review</h1>
+    <p>Fetch open PRs from a repository and generate automated code review comments & suggestions using Gemini. Provide your GitHub token (with repo read access) and a Gemini API key. This page is for internal/local use—do not share keys.</p>
+  </header>
+
+  <!-- Configuration -->
+  <section class="grid-setup" aria-label="Configuration inputs">
+    <div class="card">
+      <h2>Credentials</h2>
+      <label>
+        GitHub Personal Access Token
+        <input id="ghToken" type="password" placeholder="ghp_****************" autocomplete="off" />
+      </label>
+      <label>
+        Gemini API Key
+        <input id="geminiKey" type="password" placeholder="AIzaSy***********" autocomplete="off" />
+      </label>
+      <label>
+  Gemini Model (optional)
+  <input id="geminiModel" type="text" value="gemini-2.5-flash" placeholder="gemini-2.5-flash" autocomplete="off" />
+      </label>
+      <div class="status-line">
+        <span class="status-chip" id="credStatus">Status: Not validated</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Repository</h2>
+      <label>
+        Owner / Org
+        <input id="repoOwner" type="text" placeholder="e.g. openai" />
+      </label>
+      <label>
+        Repository Name
+        <input id="repoName" type="text" placeholder="e.g. gpt-repo" />
+      </label>
+      <label>
+        Max Files Per PR (to limit cost)
+        <input id="maxFiles" type="number" min="1" value="15" />
+      </label>
+      <label>
+        Max Diff Chars Per File
+        <input id="maxChars" type="number" min="500" value="5000" />
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Actions</h2>
+      <div class="actions">
+        <button id="btnValidate" title="Check tokens">Validate Keys</button>
+        <button id="btnFetch" disabled title="Fetch open PRs from GitHub">
+          <span class="loader" style="display:none" id="ldrFetch"></span>
+          Fetch Pull Requests
+        </button>
+        <button id="btnReview" disabled title="Perform AI review across all listed PRs">
+          <span class="loader" style="display:none" id="ldrReview"></span>
+          Perform Code Review
+        </button>
+      </div>
+      <div class="success-box" id="runTips">
+        Provide your tokens, validate, then fetch PRs. After reviewing, each PR will show AI suggestions grouped by file & line. Adjust limits for performance.
+      </div>
+    </div>
+  </section>
+
+  <!-- PR List -->
+  <section id="prList" aria-label="Pull Requests">
+    <!-- Dynamic content -->
+  </section>
+
+  <!-- Review Results -->
+  <section id="reviews" aria-label="Review Results">
+    <!-- Dynamic content -->
+  </section>
+
+  <footer>
+    <p>⚠ Internal Demo: Do not expose secrets publicly. Consider moving API calls server-side for production. | Built with FastAPI + Gemini (client-side prototype).</p>
+  </footer>
+</main>
+
+<script>
+/* =========================
+   Utility & State
+   ========================= */
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL_ALIASES = {
+  'gemini-1.5-flash': 'gemini-2.5-flash',
+  'gemini-1.5-flash-latest': 'gemini-2.5-flash',
+  'gemini-1.5-pro': 'gemini-2.0-flash',
+  'gemini-1.5-pro-latest': 'gemini-2.0-flash',
+  '1.5-flash': 'gemini-2.5-flash',
+  '1.5-pro': 'gemini-2.0-flash',
+  'gemini-2.0-flash-latest': 'gemini-2.0-flash',
+  'gemini-flash-latest': 'gemini-2.5-flash',
+  'gemini-flash': 'gemini-2.5-flash',
+  'flash': 'gemini-2.5-flash',
+  'pro': 'gemini-2.0-flash',
+};
+
+const els = {
+  ghToken: document.getElementById('ghToken'),
+  geminiKey: document.getElementById('geminiKey'),
+  geminiModel: document.getElementById('geminiModel'),
+  repoOwner: document.getElementById('repoOwner'),
+  repoName: document.getElementById('repoName'),
+  maxFiles: document.getElementById('maxFiles'),
+  maxChars: document.getElementById('maxChars'),
+  btnValidate: document.getElementById('btnValidate'),
+  btnFetch: document.getElementById('btnFetch'),
+  btnReview: document.getElementById('btnReview'),
+  credStatus: document.getElementById('credStatus'),
+  prList: document.getElementById('prList'),
+  reviews: document.getElementById('reviews'),
+  ldrFetch: document.getElementById('ldrFetch'),
+  ldrReview: document.getElementById('ldrReview'),
+};
+
+let PRS = [];             // Fetched PR metadata
+let REVIEW_RESULTS = {};  // Map PR number -> review details
+
+if (els.geminiModel && !els.geminiModel.value) {
+  els.geminiModel.value = DEFAULT_GEMINI_MODEL;
+}
+
+function sanitize(str) {
+  // Basic sanitation to avoid injection into HTML
+  return (str ?? '')
+    .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function normalizeGeminiModel(modelName) {
+  const trimmed = (modelName || '').trim();
+  if (!trimmed) return DEFAULT_GEMINI_MODEL;
+
+  const withoutPrefix = trimmed.replace(/^models\//i, '');
+  const lower = withoutPrefix.toLowerCase();
+
+  if (GEMINI_MODEL_ALIASES[lower]) {
+    return GEMINI_MODEL_ALIASES[lower];
+  }
+
+  if (lower.startsWith('gemini-1.5-') && !lower.endsWith('-latest')) {
+    return `${lower}-latest`;
+  }
+
+  return lower;
+}
+
+function setLoading(elButton, elLoader, loading) {
+  elButton.disabled = loading;
+  elLoader.style.display = loading ? 'inline-block' : 'none';
+}
+
+function enableActions() {
+  const tokensValid = !!els.ghToken.value && !!els.geminiKey.value;
+  els.btnFetch.disabled = !tokensValid;
+  // Review only enabled after PRs fetched
+  els.btnReview.disabled = !(tokensValid && PRS.length > 0);
+}
+
+/* =========================
+   Validation
+   ========================= */
+els.btnValidate.addEventListener('click', () => {
+  const gh = els.ghToken.value.trim();
+  const gm = els.geminiKey.value.trim();
+  if (!gh || !gm) {
+    els.credStatus.textContent = 'Status: Missing tokens';
+    els.credStatus.style.color = '#ffb347';
+  } else {
+    els.credStatus.textContent = 'Status: OK';
+    els.credStatus.style.color = '#42c980';
+  }
+  enableActions();
+});
+
+/* =========================
+   Fetch PRs
+   ========================= */
+els.btnFetch.addEventListener('click', async () => {
+  const owner = els.repoOwner.value.trim();
+  const repo = els.repoName.value.trim();
+  if (!owner || !repo) {
+    alert('Please enter owner and repository name.');
+    return;
+  }
+  setLoading(els.btnFetch, els.ldrFetch, true);
+  els.prList.innerHTML = '';
+  els.reviews.innerHTML = '';
+  REVIEW_RESULTS = {};
+  PRS = [];
+
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=50`;
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `token ${els.ghToken.value.trim()}`,
+        'Accept': 'application/vnd.github+json'
+      }
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`GitHub API error ${res.status}: ${txt}`);
+    }
+    const data = await res.json();
+    PRS = data.map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      created_at: pr.created_at,
+      user: pr.user?.login,
+      url: pr.html_url,
+    }));
+    renderPRs();
+    enableActions();
+  } catch (e) {
+    els.prList.innerHTML = `<div class="error-box">Failed to fetch PRs:\n${sanitize(e.message)}</div>`;
+  } finally {
+    setLoading(els.btnFetch, els.ldrFetch, false);
+  }
+});
+
+function renderPRs() {
+  if (!PRS.length) {
+    els.prList.innerHTML = `<div class="pr-item"><h3>No open pull requests.</h3></div>`;
+    return;
+  }
+  els.prList.innerHTML = '<h2>Open Pull Requests</h2>' + PRS.map(pr => `
+    <div class="pr-item" data-pr="${pr.number}">
+      <h3>#${pr.number} – ${sanitize(pr.title)}</h3>
+      <div class="meta-line">
+        <span>Opened: ${new Date(pr.created_at).toLocaleString()}</span>
+        <span>By: ${sanitize(pr.user)}</span>
+        <a href="${sanitize(pr.url)}" target="_blank" rel="noopener">View on GitHub ↗</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* =========================
+   Perform AI Code Review
+   ========================= */
+els.btnReview.addEventListener('click', async () => {
+  if (!PRS.length) {
+    alert('No PRs to review.');
+    return;
+  }
+  setLoading(els.btnReview, els.ldrReview, true);
+  els.reviews.innerHTML = '<h2>Review Results</h2><div class="success-box">Review in progress – please wait...</div>';
+  REVIEW_RESULTS = {};
+
+  const owner = els.repoOwner.value.trim();
+  const repo = els.repoName.value.trim();
+  const maxFiles = parseInt(els.maxFiles.value, 10) || 15;
+  const maxChars = parseInt(els.maxChars.value, 10) || 5000;
+
+  for (const pr of PRS) {
+    try {
+      const files = await fetchPRFiles(owner, repo, pr.number, maxFiles);
+      const prepared = prepareFileDiffs(files, maxChars);
+      const aiReview = await callGeminiReview(pr.number, pr.title, prepared);
+      REVIEW_RESULTS[pr.number] = {
+        raw: aiReview,
+        parsed: parseGeminiResponse(aiReview)
+      };
+      renderReview(pr.number);
+    } catch (e) {
+      REVIEW_RESULTS[pr.number] = { error: e.message };
+      renderReview(pr.number);
+    }
+  }
+
+  setLoading(els.btnReview, els.ldrReview, false);
+});
+
+async function fetchPRFiles(owner, repo, number, maxFiles) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `token ${els.ghToken.value.trim()}`,
+      'Accept': 'application/vnd.github+json'
+    }
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Failed to fetch files for PR #${number}: ${txt}`);
+  }
+  const data = await res.json();
+  // Each file object contains: filename, patch (diff), additions, deletions
+  return data.slice(0, maxFiles);
+}
+
+function prepareFileDiffs(files, maxChars) {
+  // Truncate patches to avoid excessively large prompts
+  return files.map(f => {
+    let patch = f.patch || '';
+    if (patch.length > maxChars) {
+      patch = patch.slice(0, maxChars) + '\n... [TRUNCATED] ...';
+    }
+    return {
+      filename: f.filename,
+      patch,
+      additions: f.additions,
+      deletions: f.deletions
+    };
+  });
+}
+
+async function callGeminiReview(prNumber, prTitle, fileDiffs) {
+  const apiKey = els.geminiKey.value.trim();
+  if (!apiKey) throw new Error('Gemini API key missing.');
+
+  const model = normalizeGeminiModel(els.geminiModel?.value);
+  if (els.geminiModel) {
+    els.geminiModel.value = model;
+  }
+
+  // Structured prompt instructions
+  const systemInstructions = `
+You are an expert senior software engineer performing a code review.
+Return JSON ONLY with this shape:
+{
+  "pr_summary": "string",
+  "comments": [
+    {
+      "filename": "string",
+      "line_hint": "string",
+      "issue": "concise description",
+      "recommendation": "clear actionable fix",
+      "suggested_code": "optional short code snippet showing the fix"
+    }
+  ]
+}
+Rules:
+- Be specific.
+- Group similar issues separately.
+- suggested_code must be minimal (only changed lines).
+- Do not include backticks or markdown fences.
+If no issues: set comments to an empty array.
+`;
+
+  const userContent = `
+Repository Pull Request #${prNumber}: ${prTitle}
+Changed Files (possibly truncated):
+${fileDiffs.map(f => `
+FILE: ${f.filename}
+ADDITIONS: ${f.additions}, DELETIONS: ${f.deletions}
+DIFF:
+${f.patch}
+`).join('\n')}
+`;
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const body = {
+    systemInstruction: {
+      role: "system",
+      parts: [{ text: systemInstructions.trim() }]
+    },
+    contents: [
+      { role: "user", parts: [{ text: userContent }] }
+    ],
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 4096,
+      responseMimeType: "application/json"
+    }
+  };
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Gemini API error: ${res.status} ${txt}`);
+  }
+
+  const data = await res.json();
+  const candidate = data?.candidates?.[0];
+
+  if (!candidate) {
+    const blockReason = data?.promptFeedback?.blockReason;
+    throw new Error(blockReason ? `Gemini returned no candidates (block reason: ${blockReason})` : 'Gemini returned no candidates.');
+  }
+
+  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+  const text = parts
+    .map(part => (typeof part?.text === 'string' ? part.text : '')
+      .trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    const finish = candidate.finishReason || 'unknown';
+    const blockReason = data?.promptFeedback?.blockReason;
+    const reasons = blockReason ? ` Block reason: ${blockReason}.` : '';
+    const mitigation = finish === 'MAX_TOKENS'
+      ? ' Try lowering "Max Files Per PR" / "Max Diff Chars Per File" or switch to a more capable Gemini model.'
+      : '';
+    throw new Error(`Empty AI response (finish reason: ${finish}).${reasons}${mitigation}`.trim());
+  }
+
+  return text;
+}
+
+function parseGeminiResponse(raw) {
+  // Try to parse JSON. If it fails, return raw fallback.
+  try {
+    // Some models may wrap JSON in markdown. Strip fences.
+    const cleaned = raw
+      .replace(/```json/gi,'')
+      .replace(/```/g,'')
+      .trim();
+    const obj = JSON.parse(cleaned);
+    if (!obj || typeof obj !== 'object') return { error: 'Malformed JSON', raw };
+    if (!Array.isArray(obj.comments)) obj.comments = [];
+    return obj;
+  } catch (e) {
+    return { error: 'Failed to parse JSON', raw };
+  }
+}
+
+function renderReview(prNumber) {
+  const result = REVIEW_RESULTS[prNumber];
+  const prMeta = PRS.find(p => p.number === prNumber);
+  const baseId = `review-pr-${prNumber}`;
+
+  // Build card
+  let html = `<div class="review-item" id="${baseId}">
+    <h3>Review – PR #${prNumber} (${sanitize(prMeta?.title)})</h3>
+  `;
+
+  if (result.error) {
+    html += `<div class="error-box">${sanitize(result.error)}</div>`;
+    html += '</div>';
+    appendOrReplace(baseId, html);
+    return;
+  }
+
+  const parsed = result.parsed;
+  if (parsed?.error) {
+    html += `<div class="error-box">Parser issue: ${sanitize(parsed.error)}\nRaw:\n${sanitize(result.raw.slice(0, 800))}${result.raw.length > 800 ? '...' : ''}</div>`;
+    html += '</div>';
+    appendOrReplace(baseId, html);
+    return;
+  }
+
+  html += `<div class="success-box">
+    <strong>PR Summary:</strong> ${sanitize(parsed.pr_summary || 'No summary')}
+  </div>`;
+
+  if (!parsed.comments.length) {
+    html += `<div class="success-box">No issues detected.</div></div>`;
+    appendOrReplace(baseId, html);
+    return;
+  }
+
+  html += `<div class="review-comments">`;
+  parsed.comments.forEach((c, idx) => {
+    html += `<div class="comment-card">
+      <h4>Issue ${idx + 1}: ${sanitize(c.filename)}</h4>
+      <div class="meta-line">
+        <span class="badge">Line</span><span>${sanitize(c.line_hint || 'N/A')}</span>
+      </div>
+      <div><strong>Issue:</strong> ${sanitize(c.issue || 'No description')}</div>
+      <div><strong>Recommendation:</strong> ${sanitize(c.recommendation || 'No recommendation')}</div>
+      ${c.suggested_code ? `<div class="suggestion">${sanitize(c.suggested_code)}</div>` : ''}
+    </div>`;
+  });
+  html += `</div></div>`;
+  appendOrReplace(baseId, html);
+}
+
+function appendOrReplace(id, html) {
+  const existing = document.getElementById(id);
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    if (!els.reviews.querySelector('h2')) {
+      els.reviews.innerHTML = '<h2>Review Results</h2>';
+    }
+    els.reviews.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+/* Re-enable buttons when inputs change */
+['ghToken','geminiKey','geminiModel'].forEach(id => {
+  els[id].addEventListener('input', enableActions);
+});
+</script>
+</body>
+</html>
