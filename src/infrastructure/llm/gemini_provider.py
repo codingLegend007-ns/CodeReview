@@ -21,17 +21,43 @@ class GeminiProvider(LLMProvider):
         "gemini-1.5-flash": 1048576,
         "gemini-1.5-pro": 1048576,
     }
+
+    MODEL_ALIASES = {
+        "gemini-1.5-flash": "gemini-1.5-flash-latest",
+        "gemini-1.5-pro": "gemini-1.5-pro-latest",
+        "1.5-flash": "gemini-1.5-flash-latest",
+        "1.5-pro": "gemini-1.5-pro-latest",
+        "flash": "gemini-1.5-flash-latest",
+        "pro": "gemini-1.5-pro-latest",
+    }
+
+    DEFAULT_MODEL = "gemini-1.5-pro-latest"
     
     def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", **kwargs):
         """Initialize Gemini provider."""
-        super().__init__(api_key, model_name, **kwargs)
+        normalized_model = self._normalize_model_name(model_name)
+        super().__init__(api_key, normalized_model, **kwargs)
+        self.original_model_name = model_name
         
         try:
             genai.configure(api_key=api_key)
-            self._model = GenerativeModel(model_name)
+            self._model = GenerativeModel(self.model_name)
             self._validate()
         except Exception as e:
             raise LLMProviderError(f"Failed to initialize Gemini provider: {e}")
+
+    @classmethod
+    def _normalize_model_name(cls, model_name: Optional[str]) -> str:
+        """Normalize model name to supported identifier."""
+        if not model_name:
+            return cls.DEFAULT_MODEL
+        candidate = model_name.strip()
+        alias = cls.MODEL_ALIASES.get(candidate.lower())
+        if alias:
+            return alias
+        if candidate.startswith("gemini-1.5-") and not candidate.endswith("-latest"):
+            return f"{candidate}-latest"
+        return candidate
     
     def _validate(self):
         """Validate model configuration."""
