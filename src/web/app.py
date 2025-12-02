@@ -18,7 +18,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
-
+"""
+// New doc for comitment
+"""
 @app.get("/", include_in_schema=False)
 async def read_home() -> FileResponse:
     """Return the single-page frontend application."""
