@@ -1,8 +1,36 @@
 """Base agent class for all CrewAI agents."""
+"""Base agent class for all CrewAI agents.
+This module defines the abstract `BaseAgent` class, which serves as a template for creating CrewAI agents.
+It enforces the implementation of essential agent properties and methods, such as `role`, `goal`, `backstory`,
+and `create_agent`. The class supports lazy initialization of the underlying CrewAI agent and provides
+configuration options for verbosity and delegation.
+Classes:
+    BaseAgent (ABC): Abstract base class for CrewAI agents, following the Template Method pattern.
+Attributes:
+    Agent: CrewAI Agent class, imported defensively.
+    CrewAgentType: Typing alias for CrewAI Agent, used for type checking.
+Exceptions:
+    ImportError: Raised if the `crewai` package is not available when attempting to instantiate an agent.
+Usage:
+    Subclass `BaseAgent` and implement the abstract properties and methods to define a custom agent.
+"""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
-from crewai import Agent
+from typing import Any, Optional, TYPE_CHECKING
+
+try:
+    from crewai import Agent
+except ImportError as import_error:  # pragma: no cover - defensive import
+    Agent = None
+    _AGENT_IMPORT_ERROR = import_error
+else:
+    _AGENT_IMPORT_ERROR = None
+
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from crewai import Agent as CrewAgentType
+else:
+    CrewAgentType = Any
 
 
 class BaseAgent(ABC):
@@ -29,10 +57,10 @@ class BaseAgent(ABC):
         self.llm = llm
         self.verbose = verbose
         self.allow_delegation = allow_delegation
-        self._agent: Optional[Agent] = None
+        self._agent: Optional[CrewAgentType] = None
     
     @abstractmethod
-    def create_agent(self) -> Agent:
+    def create_agent(self) -> CrewAgentType:
         """
         Create and return the CrewAI agent.
         
@@ -41,7 +69,7 @@ class BaseAgent(ABC):
         """
         pass
     
-    def get_agent(self) -> Agent:
+    def get_agent(self) -> CrewAgentType:
         """
         Get or create the agent instance (lazy initialization).
         
@@ -49,6 +77,10 @@ class BaseAgent(ABC):
             Agent instance
         """
         if self._agent is None:
+            if Agent is None:
+                raise ImportError(
+                    "crewai package is required to instantiate agents."
+                ) from _AGENT_IMPORT_ERROR
             self._agent = self.create_agent()
         return self._agent
     

@@ -13,13 +13,15 @@ class Settings(BaseSettings):
     github_token: str = Field(..., description="GitHub personal access token")
     github_api_url: str = Field(
         default="https://api.github.com",
-        description="GitHub API base URL"
+        description="GitHub API base URL",
+        username = "hello.harta",
+        password="hello@123"
     )
     
     # Google Gemini Configuration
     google_api_key: str = Field(..., description="Google Gemini API key")
     gemini_model: str = Field(
-        default="gemini-1.5-pro-latest",
+        default="gemini-2.5-flash",
         description="Google Gemini model name"
     )
     
@@ -132,10 +134,16 @@ class Settings(BaseSettings):
         provider = provider or self.default_llm_provider
         
         if provider == "gemini":
+            from ..llm.gemini_provider import GeminiProvider  # local import to avoid circular
+
+            normalized_model = GeminiProvider._normalize_model_name(self.gemini_model)
+            if normalized_model != self.gemini_model:
+                # Persist normalized value for subsequent access
+                object.__setattr__(self, "gemini_model", normalized_model)
             return {
                 "provider": "gemini",
                 "api_key": self.google_api_key,
-                "model": self.gemini_model,
+                "model": normalized_model,
             }
         elif provider == "grok":
             if not self.grok_api_key:

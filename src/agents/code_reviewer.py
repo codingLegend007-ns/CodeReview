@@ -1,7 +1,21 @@
 """Code reviewer agent for general code quality analysis."""
 
-from crewai import Agent
+from typing import TYPE_CHECKING
+
+try:
+    from crewai import Agent
+except ImportError as import_error:  # pragma: no cover - defensive import
+    Agent = None
+    _AGENT_IMPORT_ERROR = import_error
+else:
+    _AGENT_IMPORT_ERROR = None
+
 from .base_agent import BaseAgent
+
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from crewai import Agent as CrewAgentType
+else:
+    CrewAgentType = object
 
 
 class CodeReviewerAgent(BaseAgent):
@@ -37,8 +51,12 @@ class CodeReviewerAgent(BaseAgent):
             "and focused on improving code quality and maintainability."
         )
     
-    def create_agent(self) -> Agent:
+    def create_agent(self) -> "CrewAgentType":
         """Create the code reviewer agent."""
+        if Agent is None:
+            raise ImportError(
+                "crewai package is required to instantiate CodeReviewerAgent."
+            ) from _AGENT_IMPORT_ERROR
         return Agent(
             role=self.role,
             goal=self.goal,
@@ -75,7 +93,11 @@ class SecurityAnalyzerAgent(BaseAgent):
             "security best practices across different tech stacks."
         )
     
-    def create_agent(self) -> Agent:
+    def create_agent(self) -> "CrewAgentType":
+        if Agent is None:
+            raise ImportError(
+                "crewai package is required to instantiate SecurityAnalyzerAgent."
+            ) from _AGENT_IMPORT_ERROR
         return Agent(
             role=self.role,
             goal=self.goal,
@@ -108,7 +130,11 @@ class PerformanceAnalyzerAgent(BaseAgent):
             "You can identify inefficient code patterns and suggest optimizations."
         )
     
-    def create_agent(self) -> Agent:
+    def create_agent(self) -> "CrewAgentType":
+        if Agent is None:
+            raise ImportError(
+                "crewai package is required to instantiate PerformanceAnalyzerAgent."
+            ) from _AGENT_IMPORT_ERROR
         return Agent(
             role=self.role,
             goal=self.goal,
@@ -141,7 +167,11 @@ class SuggestionGeneratorAgent(BaseAgent):
             "improvements and provide specific, implementable solutions."
         )
     
-    def create_agent(self) -> Agent:
+    def create_agent(self) -> "CrewAgentType":
+        if Agent is None:
+            raise ImportError(
+                "crewai package is required to instantiate SuggestionGeneratorAgent."
+            ) from _AGENT_IMPORT_ERROR
         return Agent(
             role=self.role,
             goal=self.goal,
