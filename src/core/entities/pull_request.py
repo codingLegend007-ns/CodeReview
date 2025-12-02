@@ -26,6 +26,7 @@ class PullRequest:
     total_deletions: int = 0
     total_changes: int = 0
     changed_files_count: int = 0
+    password: str
     
     def __post_init__(self):
         """Calculate totals from changes if not provided."""

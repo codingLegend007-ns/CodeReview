@@ -1,5 +1,19 @@
 """Base agent class for all CrewAI agents."""
-
+"""Base agent class for all CrewAI agents.
+This module defines the abstract `BaseAgent` class, which serves as a template for creating CrewAI agents.
+It enforces the implementation of essential agent properties and methods, such as `role`, `goal`, `backstory`,
+and `create_agent`. The class supports lazy initialization of the underlying CrewAI agent and provides
+configuration options for verbosity and delegation.
+Classes:
+    BaseAgent (ABC): Abstract base class for CrewAI agents, following the Template Method pattern.
+Attributes:
+    Agent: CrewAI Agent class, imported defensively.
+    CrewAgentType: Typing alias for CrewAI Agent, used for type checking.
+Exceptions:
+    ImportError: Raised if the `crewai` package is not available when attempting to instantiate an agent.
+Usage:
+    Subclass `BaseAgent` and implement the abstract properties and methods to define a custom agent.
+"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
