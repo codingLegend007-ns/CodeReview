@@ -51,22 +51,22 @@ def create_code_review_task(
     4. Code smells and anti-patterns
     5. Documentation completeness
     
-    For each file, identify specific issues with:
+    For each issue, write one or two plain-English sentences that include:
     - File path
     - Class or function name
-    - Line numbers (reference the primary line that needs attention)
-    - Issue description
+    - Primary line number that needs attention
+    - Clear description of the problem and why it matters
     - Severity (critical, high, medium, low, info)
-    - Suggested fix
-    All comments must be concise, actionable, and understandable to a broad engineering audience.
+    - Suggested fix with reference to the applicable coding standard or guideline (e.g., PEP 8, SOLID, company style guide)
+    All comments must avoid bullet points and remain concise, actionable, and understandable to any engineer.
     """
     
     expected_output = """
     A structured analysis containing:
-    1. Overall code quality assessment
-    2. List of identified issues with severity levels, each citing file path, class or function name, and line number
-    3. Specific recommendations for each issue
-    4. Priority order for fixes
+    1. Overall code quality assessment written in plain sentences
+    2. Identified issues with severity levels, each citing file path, class/function, line number, and relevant coding standard
+    3. Specific recommendations for each issue expressed without bullet points
+    4. Priority order for fixes using narrative sentences
     """
     
     if Task is None:
@@ -104,15 +104,15 @@ def create_security_analysis_task(
     6. Insecure dependencies
     7. Hardcoded secrets
     8. Input validation issues
-    For every finding, include the file path, class or function name, and the relevant line number.
+    For every finding, write one or two sentences that include the file path, class or function name, relevant line number, impact, and reference to the applicable security standard (e.g., OWASP Top 10, company policy). Avoid bullet points.
     """
     
     expected_output = """
     Security analysis report with:
-    1. List of security vulnerabilities (file path, class/function, and line number for each)
-    2. Risk level for each vulnerability
-    3. Potential impact
-    4. Remediation steps
+    1. Narrative list of security vulnerabilities, each citing file path, class/function, line number, and relevant security standards
+    2. Risk level for each vulnerability stated in plain sentences
+    3. Potential impact described clearly
+    4. Remediation steps expressed in easy-to-understand prose (no bullet points)
     """
     
     return Task(
@@ -143,15 +143,15 @@ def create_performance_analysis_task(
     4. Blocking operations
     5. Resource-intensive operations
     6. Missing caching opportunities
-    Document every issue with the file path, class or function name, and the precise line number.
+    Document every issue with one or two clear sentences that provide the file path, class or function name, precise line number, performance impact, and any applicable engineering guideline (e.g., big-O expectations, scalability standards). Do not use bullet points.
     """
     
     expected_output = """
     Performance analysis report with:
-    1. Identified performance bottlenecks (file path, class/function, line number)
-    2. Algorithmic complexity analysis
-    3. Resource usage concerns
-    4. Optimization recommendations
+    1. Identified performance bottlenecks written as sentences citing file path, class/function, and line number
+    2. Algorithmic complexity analysis articulated plainly
+    3. Resource usage concerns explained in everyday language
+    4. Optimization recommendations described without bullet points, referencing best-practice standards where relevant
     """
     
     return Task(
@@ -196,18 +196,18 @@ def create_suggestion_generation_task(
     - Performance analysis
 
     Generate:
-    1. Prioritized list of improvements (include file path, class/function, and line number where applicable)
-    2. Specific implementation guidance
+    1. Prioritized list of improvements (each described in sentences that include file path, class/function, line number, and relevant coding or architectural standards)
+    2. Specific implementation guidance explained plainly
     3. Code examples where applicable
-    4. Estimated effort for each suggestion
+    4. Estimated effort for each suggestion using descriptive prose
     """
 
     expected_output = """
     Structured improvement plan with:
-    1. Top 5 critical improvements, each referencing file path, class/function, and line number
-    2. Detailed action items
-    3. Implementation examples
-    4. Priority and effort estimates
+    1. Top 5 critical improvements, each referencing file path, class/function, line number, and applicable standards in sentence form
+    2. Detailed action items without bullet formatting
+    3. Implementation examples, if needed, introduced within the narrative
+    4. Priority and effort estimates expressed as plain sentences
     """
 
     return Task(
