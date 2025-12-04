@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 from typing import Any, Dict, List, Optional
 
@@ -111,6 +112,7 @@ class ReviewOrchestrator:
 
 		sections: List[Dict[str, Any]] = []
 		intermediate_results: Dict[str, str] = {}
+		allowed_filenames = sorted({change.filename for change in significant_changes})
 
 		workflow_plan = [
 			(
@@ -137,7 +139,7 @@ class ReviewOrchestrator:
 			task = task_factory(agent, pull_request, significant_changes)
 			output = self._execute_task(agent, task)
 			intermediate_results[key] = output
-			polished_output = self._polish_output(label, output)
+			polished_output = self._polish_output(label, output, allowed_filenames=allowed_filenames)
 			sections.append({
 				"key": key,
 				"label": label,
@@ -151,7 +153,11 @@ class ReviewOrchestrator:
 		)
 		suggestion_output = self._execute_task(agents["suggestion"], suggestion_task)
 		intermediate_results["suggestions"] = suggestion_output
-		polished_suggestion = self._polish_output("Improvement Suggestions", suggestion_output)
+		polished_suggestion = self._polish_output(
+			"Improvement Suggestions",
+			suggestion_output,
+			allowed_filenames=allowed_filenames,
+		)
 		sections.append({
 			"key": "suggestions",
 			"label": "Improvement Suggestions",
@@ -206,32 +212,48 @@ class ReviewOrchestrator:
 
 		return str(result)
 
-	def _polish_output(self, label: str, content: str) -> str:
+	def _polish_output(
+		self,
+		label: str,
+		content: str,
+		*,
+		allowed_filenames: Optional[List[str]] = None,
+	) -> str:
 		"""Rewrite agent output into clear, structured, and actionable guidance."""
 
 		if not content or not content.strip():
 			return (
-				"Summary:\n• No findings reported.\n\n"
-				"Key Findings:\n• None.\n\n"
-				"Fix Suggestions:\n• None."
+				"**General**\n"
+				"Line ?: No findings were reported. Fix: No action required."
 			)
 
 		trimmed = content.strip()
 		if len(trimmed) > 6000:
 			trimmed = textwrap.shorten(trimmed, width=6000, placeholder="... [content truncated]")
 
+		allowed_filenames = allowed_filenames or []
+		normalized_allowed = sorted(dict.fromkeys(allowed_filenames))
+		allowed_list_text = ""
+		if normalized_allowed:
+			allowed_list_text = (
+				"Allowed class/file names (copy exactly, including extensions): "
+				+ ", ".join(normalized_allowed)
+				+ "\n"
+			)
+
 		prompt = (
 			"You are preparing reviewer notes for a pull request. Rewrite the following "
-			f"{label.lower()} findings so they are easy to scan by a developer during code review. "
-			"Follow these rules:\n"
-			"1. Start with a one-sentence summary.\n"
-			"2. Provide a 'Key Findings' section with bullet points; each bullet must start with the file path (if known), followed by the class or function name and primary line number in the format `• path/ClassName (line 123): issue`.\n"
-			"3. Provide a 'Fix Suggestions' section whose bullets mirror the same location references and give concrete, actionable steps or code changes.\n"
-			"4. Keep language concise, direct, and accessible to any engineer.\n"
-			"5. If context lacks a class or line, state 'Unknown'.\n"
-			"6. If there are no findings or fixes, write 'None'.\n"
-			"7. Keep the response under 250 words.\n"
-			"Use Markdown headings and bullet lists.\n\n"
+			f"{label.lower()} findings so that each class or file has its own section. "
+			"Follow these formatting rules exactly:\n"
+			f"{allowed_list_text}"
+			"1. For every class or file, output a Markdown bold header on its own line with the exact name (including extension) taken from the original notes. If the notes omit an extension, assume `.py` and append it. Never invent `.java` unless it appears in the original notes.\n"
+			"2. Under each header, list each comment on its own line in the format `Line <number>: <issue sentence>. Fix: <clear fix sentence>.`.\n"
+			"3. Use simple, easy-to-understand English and reference relevant coding or security standards when helpful.\n"
+			"4. If either the class/file name or the line number is missing, write `Unknown` in that position.\n"
+			"5. Leave a single blank line between different class or file sections.\n"
+			"6. Do not add any other headings, bullet points, numbering, or paragraphs.\n"
+			"7. Keep the entire response under 250 words.\n"
+			"8. If there are no findings, output exactly `**General**` followed by `Line ?: No findings were reported. Fix: No action required.`\n\n"
 			"Original notes:\n"
 			f"{trimmed}"
 		)
@@ -251,4 +273,32 @@ class ReviewOrchestrator:
 			return trimmed
 
 		polished_text = (polished_text or "").strip()
-		return polished_text if polished_text else trimmed
+		if not polished_text:
+			return trimmed
+
+		if normalized_allowed:
+			allowed_set = {name for name in normalized_allowed}
+			allowed_lower_map = {name.lower(): name for name in normalized_allowed}
+			allowed_base_map = {Path(name).stem.lower(): name for name in normalized_allowed}
+			adjusted_lines: List[str] = []
+			for line in polished_text.splitlines():
+				stripped = line.strip()
+				if stripped.startswith("**") and stripped.endswith("**"):
+					inner = stripped.strip("*")
+					normalized_inner = inner.strip()
+					lower_inner = normalized_inner.lower()
+					replacement = None
+					if normalized_inner in allowed_set:
+						replacement = normalized_inner
+					elif lower_inner in allowed_lower_map:
+						replacement = allowed_lower_map[lower_inner]
+					elif normalized_inner not in {label or "", "General"}:
+						candidate_base = Path(normalized_inner).stem.lower()
+						if candidate_base in allowed_base_map:
+							replacement = allowed_base_map[candidate_base]
+					if replacement:
+						line = f"**{replacement}**"
+				adjusted_lines.append(line)
+			polished_text = "\n".join(adjusted_lines)
+
+		return polished_text
