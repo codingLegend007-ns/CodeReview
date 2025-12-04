@@ -30,6 +30,7 @@ from ..agents.code_reviewer import (
 	SecurityAnalyzerAgent,
 	SuggestionGeneratorAgent,
 )
+from ..infrastructure.telemetry import ensure_global_tracer_provider
 from ..core.entities.pull_request import PullRequest
 from ..tasks.review_tasks import (
 	create_code_review_task,
@@ -47,6 +48,8 @@ def create_crewai_llm(
 	**kwargs: Any,
 ) -> Any:
 	"""Create a CrewAI-compatible LLM instance from configuration."""
+
+	ensure_global_tracer_provider()
 
 	provider = llm_config.get("provider")
 	model = llm_config.get("model")
@@ -236,7 +239,8 @@ class ReviewOrchestrator:
 		allowed_list_text = ""
 		if normalized_allowed:
 			allowed_list_text = (
-				"Allowed class/file names (copy exactly, including extensions): "
+				"Allowed class/file names (copy exactly, including extensions). "
+				"Ignore or discard any finding for other files: "
 				+ ", ".join(normalized_allowed)
 				+ "\n"
 			)
@@ -280,25 +284,46 @@ class ReviewOrchestrator:
 			allowed_set = {name for name in normalized_allowed}
 			allowed_lower_map = {name.lower(): name for name in normalized_allowed}
 			allowed_base_map = {Path(name).stem.lower(): name for name in normalized_allowed}
-			adjusted_lines: List[str] = []
-			for line in polished_text.splitlines():
-				stripped = line.strip()
+			filtered_lines: List[str] = []
+			current_section_allowed = False
+
+			def _normalize_header(header: str) -> Optional[str]:
+				normalized_inner = header.strip()
+				if not normalized_inner:
+					return None
+				if normalized_inner in allowed_set:
+					return normalized_inner
+				lower_inner = normalized_inner.lower()
+				if lower_inner in allowed_lower_map:
+					return allowed_lower_map[lower_inner]
+				candidate_base = Path(normalized_inner).stem.lower()
+				return allowed_base_map.get(candidate_base)
+
+			for raw_line in polished_text.splitlines():
+				stripped = raw_line.strip()
 				if stripped.startswith("**") and stripped.endswith("**"):
 					inner = stripped.strip("*")
-					normalized_inner = inner.strip()
-					lower_inner = normalized_inner.lower()
-					replacement = None
-					if normalized_inner in allowed_set:
-						replacement = normalized_inner
-					elif lower_inner in allowed_lower_map:
-						replacement = allowed_lower_map[lower_inner]
-					elif normalized_inner not in {label or "", "General"}:
-						candidate_base = Path(normalized_inner).stem.lower()
-						if candidate_base in allowed_base_map:
-							replacement = allowed_base_map[candidate_base]
+					if inner.strip() == "General":
+						filtered_lines.append(raw_line)
+						current_section_allowed = True
+						continue
+
+					replacement = _normalize_header(inner)
 					if replacement:
-						line = f"**{replacement}**"
-				adjusted_lines.append(line)
-			polished_text = "\n".join(adjusted_lines)
+						filtered_lines.append(f"**{replacement}**")
+						current_section_allowed = True
+					else:
+						current_section_allowed = False
+					continue
+
+				if current_section_allowed:
+					filtered_lines.append(raw_line)
+
+			polished_text = "\n".join(filtered_lines).strip()
+			if not polished_text:
+				return (
+					"**General**\n"
+					"Line ?: No findings were reported. Fix: No action required."
+				)
 
 		return polished_text
