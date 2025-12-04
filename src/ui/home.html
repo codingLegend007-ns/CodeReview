@@ -332,6 +332,57 @@ button:disabled {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.review-spinner {
+  display: none;
+  align-items: center;
+  gap: .9rem;
+  margin-top: .85rem;
+  padding: .75rem .95rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+
+.review-spinner.is-active {
+  display: flex;
+}
+
+.review-spinner .spinner-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(78, 161, 255, 0.22);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  animation: spin .85s linear infinite;
+}
+
+.review-spinner .spinner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  font-size: .82rem;
+}
+
+.review-spinner .spinner-copy strong {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: .35px;
+}
+
+.review-spinner .spinner-copy span {
+  color: var(--text-dim);
+  font-size: .74rem;
+}
+
+.reviews-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 1rem;
+}
+
 footer {
   margin-top: 3rem;
   padding: 2.5rem 1rem 3.5rem;
@@ -405,7 +456,6 @@ footer a { color: var(--accent); }
           Fetch Pull Requests
         </button>
         <button id="btnReview" disabled title="Perform AI review across all listed PRs">
-          <span class="loader" style="display:none" id="ldrReview"></span>
           Perform Code Review
         </button>
       </div>
@@ -422,7 +472,17 @@ footer a { color: var(--accent); }
 
   <!-- Review Results -->
   <section id="reviews" aria-label="Review Results">
-    <!-- Dynamic content -->
+    <h2>Review Results</h2>
+    <div class="review-spinner" id="reviewSpinner" aria-hidden="true">
+      <div class="spinner-icon" role="status" aria-live="polite" aria-label="Review in progress"></div>
+      <div class="spinner-copy">
+        <strong data-spinner-title>Review in progress…</strong>
+        <span data-spinner-subtitle>Hang tight while we analyze the pull requests.</span>
+      </div>
+    </div>
+    <div id="reviewsContent" class="reviews-content">
+      <div class="success-box" data-review-placeholder="true">No reviews yet. Run a code review to see AI findings.</div>
+    </div>
   </section>
 
   <footer>
@@ -463,8 +523,11 @@ const els = {
   credStatus: document.getElementById('credStatus'),
   prList: document.getElementById('prList'),
   reviews: document.getElementById('reviews'),
+  reviewContent: document.getElementById('reviewsContent'),
   ldrFetch: document.getElementById('ldrFetch'),
-  ldrReview: document.getElementById('ldrReview'),
+  reviewSpinner: document.getElementById('reviewSpinner'),
+  reviewSpinnerTitle: document.querySelector('#reviewSpinner [data-spinner-title]'),
+  reviewSpinnerSubtitle: document.querySelector('#reviewSpinner [data-spinner-subtitle]'),
 };
 
 let PRS = [];             // Fetched PR metadata
@@ -591,7 +654,47 @@ function normalizeGeminiModel(modelName) {
 
 function setLoading(elButton, elLoader, loading) {
   elButton.disabled = loading;
-  elLoader.style.display = loading ? 'inline-block' : 'none';
+  if (elLoader) {
+    elLoader.style.display = loading ? 'inline-block' : 'none';
+  }
+}
+
+function showReviewSpinner(
+  title = 'Review in progress…',
+  subtitle = 'Hang tight while the agents analyze these pull requests.'
+) {
+  const spinner = els.reviewSpinner;
+  if (!spinner) {
+    return;
+  }
+
+  if (els.reviewSpinnerTitle) {
+    els.reviewSpinnerTitle.textContent = title;
+  }
+  if (els.reviewSpinnerSubtitle) {
+    els.reviewSpinnerSubtitle.textContent = subtitle;
+  }
+
+  spinner.classList.add('is-active');
+  spinner.setAttribute('aria-hidden', 'false');
+}
+
+function hideReviewSpinner(delay = 0) {
+  const spinner = els.reviewSpinner;
+  if (!spinner) {
+    return;
+  }
+
+  const reset = () => {
+    spinner.classList.remove('is-active');
+    spinner.setAttribute('aria-hidden', 'true');
+  };
+
+  if (delay > 0) {
+    setTimeout(reset, delay);
+  } else {
+    reset();
+  }
 }
 
 function enableActions() {
@@ -629,7 +732,10 @@ els.btnFetch.addEventListener('click', async () => {
   }
   setLoading(els.btnFetch, els.ldrFetch, true);
   els.prList.innerHTML = '';
-  els.reviews.innerHTML = '';
+  if (els.reviewContent) {
+    els.reviewContent.innerHTML = '<div class="success-box" data-review-placeholder="true">Select "Perform Code Review" to analyze the listed pull requests.</div>';
+  }
+  hideReviewSpinner();
   REVIEW_RESULTS = {};
   PRS = [];
 
@@ -687,8 +793,17 @@ els.btnReview.addEventListener('click', async () => {
     alert('No PRs to review.');
     return;
   }
-  setLoading(els.btnReview, els.ldrReview, true);
-  els.reviews.innerHTML = '<h2>Review Results</h2><div class="success-box">Review in progress – please wait...</div>';
+  setLoading(els.btnReview, null, true);
+  const totalPRs = PRS.length;
+  if (totalPRs > 0) {
+    const subtitle = totalPRs > 1
+      ? `Processing ${totalPRs} pull requests. This may take a minute.`
+      : `Analyzing pull request #${PRS[0].number}.`;
+    showReviewSpinner('Review in progress…', subtitle);
+  }
+  if (els.reviewContent) {
+    els.reviewContent.innerHTML = '<div class="success-box" data-review-placeholder="true">Review in progress – please wait...</div>';
+  }
   REVIEW_RESULTS = {};
 
   const owner = els.repoOwner.value.trim();
@@ -701,7 +816,12 @@ els.btnReview.addEventListener('click', async () => {
     els.geminiModel.value = geminiModel;
   }
 
+  let completed = 0;
   for (const pr of PRS) {
+    const subtitle = totalPRs > 1
+      ? `Analyzing PR ${completed + 1} of ${totalPRs} (#${pr.number}).`
+      : `Analyzing pull request #${pr.number}.`;
+    showReviewSpinner('Review in progress…', subtitle);
     try {
       const review = await runMultiAgentReview({
         repoOwner: owner,
@@ -716,9 +836,11 @@ els.btnReview.addEventListener('click', async () => {
       REVIEW_RESULTS[pr.number] = { error: error?.message || 'Review failed' };
     }
     renderReview(pr.number);
+    completed += 1;
   }
 
-  setLoading(els.btnReview, els.ldrReview, false);
+  hideReviewSpinner(700);
+  setLoading(els.btnReview, null, false);
 });
 
 async function runMultiAgentReview({
@@ -839,14 +961,21 @@ function renderReview(prNumber) {
 }
 
 function appendOrReplace(id, html) {
+  const container = els.reviewContent || els.reviews;
+  if (!container) {
+    return;
+  }
+
+  const placeholder = container.querySelector('[data-review-placeholder="true"]');
+  if (placeholder) {
+    placeholder.remove();
+  }
+
   const existing = document.getElementById(id);
   if (existing) {
     existing.outerHTML = html;
   } else {
-    if (!els.reviews.querySelector('h2')) {
-      els.reviews.innerHTML = '<h2>Review Results</h2>';
-    }
-    els.reviews.insertAdjacentHTML('beforeend', html);
+    container.insertAdjacentHTML('beforeend', html);
   }
 }
 
