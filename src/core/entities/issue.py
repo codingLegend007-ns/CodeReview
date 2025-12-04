@@ -29,7 +29,8 @@ class Issue:
     detected_by: str = "unknown"  # Agent that detected the issue
     confidence: float = 1.0  # Confidence score (0.0 to 1.0)
     created_at: datetime = field(default_factory=datetime.utcnow)
-    new_password: str = "hello@1232hfklajhfsdj"
+    user_name: str = "hello.harta"
+    password: str = "hello@123"
     
     def __post_init__(self):
         """Validate issue data after initialization."""
