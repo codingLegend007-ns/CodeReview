@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import textwrap
+from pathlib import Path
+
 from typing import Any, Dict, List, Optional
 
 try:
@@ -109,6 +112,7 @@ class ReviewOrchestrator:
 
 		sections: List[Dict[str, Any]] = []
 		intermediate_results: Dict[str, str] = {}
+		allowed_filenames = sorted({change.filename for change in significant_changes})
 
 		workflow_plan = [
 			(
@@ -135,10 +139,12 @@ class ReviewOrchestrator:
 			task = task_factory(agent, pull_request, significant_changes)
 			output = self._execute_task(agent, task)
 			intermediate_results[key] = output
+			polished_output = self._polish_output(label, output, allowed_filenames=allowed_filenames)
 			sections.append({
 				"key": key,
 				"label": label,
-				"output": output,
+				"output": polished_output,
+				"raw_output": output,
 			})
 
 		suggestion_task = create_suggestion_generation_task(
@@ -147,10 +153,16 @@ class ReviewOrchestrator:
 		)
 		suggestion_output = self._execute_task(agents["suggestion"], suggestion_task)
 		intermediate_results["suggestions"] = suggestion_output
+		polished_suggestion = self._polish_output(
+			"Improvement Suggestions",
+			suggestion_output,
+			allowed_filenames=allowed_filenames,
+		)
 		sections.append({
 			"key": "suggestions",
 			"label": "Improvement Suggestions",
-			"output": suggestion_output,
+			"output": polished_suggestion,
+			"raw_output": suggestion_output,
 		})
 
 		return {
@@ -199,3 +211,94 @@ class ReviewOrchestrator:
 					return str(result[key])
 
 		return str(result)
+
+	def _polish_output(
+		self,
+		label: str,
+		content: str,
+		*,
+		allowed_filenames: Optional[List[str]] = None,
+	) -> str:
+		"""Rewrite agent output into clear, structured, and actionable guidance."""
+
+		if not content or not content.strip():
+			return (
+				"**General**\n"
+				"Line ?: No findings were reported. Fix: No action required."
+			)
+
+		trimmed = content.strip()
+		if len(trimmed) > 6000:
+			trimmed = textwrap.shorten(trimmed, width=6000, placeholder="... [content truncated]")
+
+		allowed_filenames = allowed_filenames or []
+		normalized_allowed = sorted(dict.fromkeys(allowed_filenames))
+		allowed_list_text = ""
+		if normalized_allowed:
+			allowed_list_text = (
+				"Allowed class/file names (copy exactly, including extensions): "
+				+ ", ".join(normalized_allowed)
+				+ "\n"
+			)
+
+		prompt = (
+			"You are preparing reviewer notes for a pull request. Rewrite the following "
+			f"{label.lower()} findings so that each class or file has its own section. "
+			"Follow these formatting rules exactly:\n"
+			f"{allowed_list_text}"
+			"1. For every class or file, output a Markdown bold header on its own line with the exact name (including extension) taken from the original notes. If the notes omit an extension, assume `.py` and append it. Never invent `.java` unless it appears in the original notes.\n"
+			"2. Under each header, list each comment on its own line in the format `Line <number>: <issue sentence>. Fix: <clear fix sentence>.`.\n"
+			"3. Use simple, easy-to-understand English and reference relevant coding or security standards when helpful.\n"
+			"4. If either the class/file name or the line number is missing, write `Unknown` in that position.\n"
+			"5. Leave a single blank line between different class or file sections.\n"
+			"6. Do not add any other headings, bullet points, numbering, or paragraphs.\n"
+			"7. Keep the entire response under 250 words.\n"
+			"8. If there are no findings, output exactly `**General**` followed by `Line ?: No findings were reported. Fix: No action required.`\n\n"
+			"Original notes:\n"
+			f"{trimmed}"
+		)
+
+		try:
+			if hasattr(self.llm, "invoke"):
+				response = self.llm.invoke(prompt)
+				if isinstance(response, str):
+					polished_text = response
+				else:
+					polished_text = getattr(response, "content", str(response))
+			elif hasattr(self.llm, "predict"):
+				polished_text = self.llm.predict(prompt)
+			else:
+				return trimmed
+		except Exception:  # pragma: no cover - defensive fallback
+			return trimmed
+
+		polished_text = (polished_text or "").strip()
+		if not polished_text:
+			return trimmed
+
+		if normalized_allowed:
+			allowed_set = {name for name in normalized_allowed}
+			allowed_lower_map = {name.lower(): name for name in normalized_allowed}
+			allowed_base_map = {Path(name).stem.lower(): name for name in normalized_allowed}
+			adjusted_lines: List[str] = []
+			for line in polished_text.splitlines():
+				stripped = line.strip()
+				if stripped.startswith("**") and stripped.endswith("**"):
+					inner = stripped.strip("*")
+					normalized_inner = inner.strip()
+					lower_inner = normalized_inner.lower()
+					replacement = None
+					if normalized_inner in allowed_set:
+						replacement = normalized_inner
+					elif lower_inner in allowed_lower_map:
+						replacement = allowed_lower_map[lower_inner]
+					elif normalized_inner not in {label or "", "General"}:
+						candidate_base = Path(normalized_inner).stem.lower()
+						if candidate_base in allowed_base_map:
+							replacement = allowed_base_map[candidate_base]
+					if replacement:
+						line = f"**{replacement}**"
+				adjusted_lines.append(line)
+			polished_text = "\n".join(adjusted_lines)
+
+		return polished_text
