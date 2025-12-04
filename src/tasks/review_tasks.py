@@ -13,6 +13,29 @@ else:
 
 from ..core.entities import PullRequest, CodeChange
 
+
+def _build_allowed_files_text(code_changes: List[CodeChange], *, limit: int = 12) -> str:
+    """Return instructions constraining analysis to the actual changed files."""
+
+    files = sorted({change.filename for change in code_changes if getattr(change, "filename", None)})
+    if not files:
+        return (
+            "Only evaluate the files included in the pull request diff. Do not invent new "
+            "file paths or extensions."
+        )
+
+    display = files[:limit]
+    remaining = len(files) - len(display)
+    file_lines = "\n".join(f"- {path}" for path in display)
+    if remaining > 0:
+        file_lines += f"\n- ... (+{remaining} more files)"
+
+    return (
+        "Only reference files from this definitive list. Use the paths and extensions "
+        "exactly as written; do not mention any other files or languages:\n"
+        f"{file_lines}"
+    )
+
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from crewai import Task as CrewTaskType
 else:
@@ -37,12 +60,16 @@ def create_code_review_task(
     Returns:
         Task instance
     """
+    allowed_files_text = _build_allowed_files_text(code_changes)
+
     description = f"""
     Review the following pull request for code quality issues:
     
     PR: #{pull_request.number} - {pull_request.title}
     Repository: {pull_request.repository}
     Files changed: {len(code_changes)}
+
+    {allowed_files_text}
     
     Analyze the code changes for:
     1. Code quality and maintainability
@@ -59,7 +86,7 @@ def create_code_review_task(
     - Severity (critical, high, medium, low, info)
     - Suggested fix with reference to the applicable coding standard or guideline (e.g., PEP 8, SOLID, company style guide)
     All comments must avoid bullet points and remain concise, actionable, and understandable to any engineer.
-    """
+        """
     
     expected_output = """
     A structured analysis containing:
@@ -92,6 +119,8 @@ def create_security_analysis_task(
         raise ImportError(
             "crewai package is required to build review tasks."
         ) from _TASK_IMPORT_ERROR
+    allowed_files_text = _build_allowed_files_text(code_changes)
+
     description = f"""
     Perform security analysis on pull request #{pull_request.number}.
     
@@ -104,7 +133,9 @@ def create_security_analysis_task(
     6. Insecure dependencies
     7. Hardcoded secrets
     8. Input validation issues
-    For every finding, write one or two sentences that include the file path, class or function name, relevant line number, impact, and reference to the applicable security standard (e.g., OWASP Top 10, company policy). Avoid bullet points.
+    {allowed_files_text}
+
+    For every finding, write one or two sentences that include the file path (from the allowed list), class or function name, relevant line number, impact, and reference to the applicable security standard (e.g., OWASP Top 10, company policy). Avoid bullet points.
     """
     
     expected_output = """
@@ -133,6 +164,8 @@ def create_performance_analysis_task(
         raise ImportError(
             "crewai package is required to build review tasks."
         ) from _TASK_IMPORT_ERROR
+    allowed_files_text = _build_allowed_files_text(code_changes)
+
     description = f"""
     Analyze pull request #{pull_request.number} for performance issues.
     
@@ -143,7 +176,9 @@ def create_performance_analysis_task(
     4. Blocking operations
     5. Resource-intensive operations
     6. Missing caching opportunities
-    Document every issue with one or two clear sentences that provide the file path, class or function name, precise line number, performance impact, and any applicable engineering guideline (e.g., big-O expectations, scalability standards). Do not use bullet points.
+    {allowed_files_text}
+
+    Document every issue with one or two clear sentences that provide the file path (choose from the allowed list), class or function name, precise line number, performance impact, and any applicable engineering guideline (e.g., big-O expectations, scalability standards). Do not use bullet points.
     """
     
     expected_output = """

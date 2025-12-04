@@ -208,16 +208,73 @@ button:disabled {
 }
 
 .section-output {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
   margin: 0;
-  background: var(--code-bg);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: .6rem .7rem;
-  white-space: pre-wrap;
-  font-family: var(--mono);
-  font-size: .75rem;
+  padding: .75rem .8rem;
+}
+
+.agent-group {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.agent-header {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: .85rem;
+  letter-spacing: .35px;
+}
+
+.agent-divider {
+  border: 0;
+  border-top: 1px dashed var(--border);
+  margin: .6rem 0;
+}
+
+.review-line {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .5rem .6rem;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  font-size: .78rem;
   line-height: 1.45;
-  overflow-x: auto;
+}
+
+.line-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--text-dim);
+}
+
+.line-issue {
+  color: var(--text);
+}
+
+.line-fix {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.line-fix span {
+  color: var(--text-dim);
+  font-weight: 700;
+  margin-right: .35rem;
+}
+
+.agent-empty {
+  color: var(--text-dim);
+  font-size: .75rem;
 }
 
 .badge {
@@ -421,6 +478,97 @@ function sanitize(str) {
   // Basic sanitation to avoid injection into HTML
   return (str ?? '')
     .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+}
+
+function groupAgentOutput(output) {
+  const groups = [];
+  let current = null;
+
+  String(output ?? '')
+    .split(/\r?\n/)
+    .forEach(rawLine => {
+      const line = rawLine.trim();
+      if (!line) return;
+
+      const headerMatch = line.match(/^\*\*(.+?)\*\*$/);
+      if (headerMatch) {
+        const header = headerMatch[1].trim() || 'General';
+        current = { header, items: [] };
+        groups.push(current);
+        return;
+      }
+
+      if (!current) {
+        current = { header: 'General', items: [] };
+        groups.push(current);
+      }
+
+      current.items.push(line);
+    });
+
+  return groups;
+}
+
+function formatAgentLine(line) {
+  const trimmed = line.trim();
+  const lower = trimmed.toLowerCase();
+  const fixIndex = lower.indexOf('fix:');
+
+  let issuePart = trimmed;
+  let fixPart = '';
+
+  if (fixIndex !== -1) {
+    issuePart = trimmed.slice(0, fixIndex).trim();
+    fixPart = trimmed.slice(fixIndex + 4).trim();
+  }
+
+  let lineLabel = 'Line ?';
+  let issueText = issuePart;
+
+  const lineMatch = issuePart.match(/^Line\s+([^:]+):\s*(.*)$/i);
+  if (lineMatch) {
+    lineLabel = `Line ${lineMatch[1].trim() || '?'}`;
+    issueText = lineMatch[2].trim() || 'Issue details missing.';
+  } else if (/^Unknown/i.test(issuePart)) {
+    lineLabel = 'Line Unknown';
+    issueText = issuePart.replace(/^Unknown\s*:?\s*/i, '').trim() || 'Issue details missing.';
+  }
+
+  if (!issueText) {
+    issueText = 'Issue details missing.';
+  }
+
+  return {
+    lineLabel,
+    issueText,
+    fixText: fixPart,
+  };
+}
+
+function renderAgentOutput(output) {
+  const groups = groupAgentOutput(output);
+  if (!groups.length) {
+    return `<p class="agent-empty">${sanitize(output || 'No output provided.')}</p>`;
+  }
+
+  const renderedGroups = groups.map(group => {
+    const headerHtml = `<div class="agent-header">${sanitize(group.header || 'General')}</div>`;
+    const itemsHtml = (group.items && group.items.length)
+      ? group.items.map(item => {
+          const parsed = formatAgentLine(item);
+          const lineLabel = sanitize(parsed.lineLabel);
+          const issue = sanitize(parsed.issueText);
+          const fix = parsed.fixText
+            ? `<div class="line-fix"><span>Fix:</span> ${sanitize(parsed.fixText)}</div>`
+            : '';
+          return `<div class="review-line"><div class="line-label">${lineLabel}</div><div class="line-issue">${issue}</div>${fix}</div>`;
+        }).join('')
+      : '<div class="review-line agent-empty">No findings reported.</div>';
+
+    return `<div class="agent-group">${headerHtml}${itemsHtml}</div>`;
+  });
+
+  return renderedGroups.join('<hr class="agent-divider" />');
 }
 
 function normalizeGeminiModel(modelName) {
@@ -683,7 +831,7 @@ function renderReview(prNumber) {
     const output = section.output || 'No output provided.';
     html += `<div class="section-card">
       <h4>${sanitize(label)}</h4>
-      <pre class="section-output">${sanitize(output)}</pre>
+      <div class="section-output">${renderAgentOutput(output)}</div>
     </div>`;
   });
   html += '</div></div>';
