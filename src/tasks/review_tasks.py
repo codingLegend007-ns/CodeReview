@@ -53,16 +53,18 @@ def create_code_review_task(
     
     For each file, identify specific issues with:
     - File path
-    - Line numbers
+    - Class or function name
+    - Line numbers (reference the primary line that needs attention)
     - Issue description
     - Severity (critical, high, medium, low, info)
     - Suggested fix
+    All comments must be concise, actionable, and understandable to a broad engineering audience.
     """
     
     expected_output = """
     A structured analysis containing:
     1. Overall code quality assessment
-    2. List of identified issues with severity levels
+    2. List of identified issues with severity levels, each citing file path, class or function name, and line number
     3. Specific recommendations for each issue
     4. Priority order for fixes
     """
@@ -102,11 +104,12 @@ def create_security_analysis_task(
     6. Insecure dependencies
     7. Hardcoded secrets
     8. Input validation issues
+    For every finding, include the file path, class or function name, and the relevant line number.
     """
     
     expected_output = """
     Security analysis report with:
-    1. List of security vulnerabilities
+    1. List of security vulnerabilities (file path, class/function, and line number for each)
     2. Risk level for each vulnerability
     3. Potential impact
     4. Remediation steps
@@ -140,11 +143,12 @@ def create_performance_analysis_task(
     4. Blocking operations
     5. Resource-intensive operations
     6. Missing caching opportunities
+    Document every issue with the file path, class or function name, and the precise line number.
     """
     
     expected_output = """
     Performance analysis report with:
-    1. Identified performance bottlenecks
+    1. Identified performance bottlenecks (file path, class/function, line number)
     2. Algorithmic complexity analysis
     3. Resource usage concerns
     4. Optimization recommendations
@@ -192,7 +196,7 @@ def create_suggestion_generation_task(
     - Performance analysis
 
     Generate:
-    1. Prioritized list of improvements
+    1. Prioritized list of improvements (include file path, class/function, and line number where applicable)
     2. Specific implementation guidance
     3. Code examples where applicable
     4. Estimated effort for each suggestion
@@ -200,7 +204,7 @@ def create_suggestion_generation_task(
 
     expected_output = """
     Structured improvement plan with:
-    1. Top 5 critical improvements
+    1. Top 5 critical improvements, each referencing file path, class/function, and line number
     2. Detailed action items
     3. Implementation examples
     4. Priority and effort estimates

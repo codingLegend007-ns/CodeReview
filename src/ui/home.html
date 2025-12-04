@@ -190,6 +190,36 @@ button:disabled {
   letter-spacing: .4px;
 }
 
+.section-card {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .7rem .8rem .85rem;
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+}
+
+.section-card h4 {
+  margin: 0;
+  font-size: .95rem;
+  color: var(--accent);
+  letter-spacing: .45px;
+}
+
+.section-output {
+  margin: 0;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .6rem .7rem;
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: .75rem;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+
 .badge {
   padding: .2rem .45rem;
   background: var(--accent-alt);
@@ -265,7 +295,7 @@ footer a { color: var(--accent); }
 <main>
   <header>
     <h1>AI GitHub Pull Request Review</h1>
-    <p>Fetch open PRs from a repository and generate automated code review comments & suggestions using Gemini. Provide your GitHub token (with repo read access) and a Gemini API key. This page is for internal/local use—do not share keys.</p>
+  <p>Fetch open PRs from a repository and trigger a multi-agent Gemini review (code, security, performance, and improvement suggestions). Provide your GitHub token (with repo read access) and a Gemini API key. Everything runs locally—keep your keys private.</p>
   </header>
 
   <!-- Configuration -->
@@ -339,7 +369,7 @@ footer a { color: var(--accent); }
   </section>
 
   <footer>
-    <p>⚠ Internal Demo: Do not expose secrets publicly. Consider moving API calls server-side for production. | Built with FastAPI + Gemini (client-side prototype).</p>
+  <p>⚠ Internal Demo: Do not expose secrets publicly. Backend FastAPI stores nothing and forwards tokens directly to GitHub/Gemini for the current request only.</p>
   </footer>
 </main>
 
@@ -381,7 +411,7 @@ const els = {
 };
 
 let PRS = [];             // Fetched PR metadata
-let REVIEW_RESULTS = {};  // Map PR number -> review details
+let REVIEW_RESULTS = {};  // Map PR number -> backend review response
 
 if (els.geminiModel && !els.geminiModel.value) {
   els.geminiModel.value = DEFAULT_GEMINI_MODEL;
@@ -515,177 +545,89 @@ els.btnReview.addEventListener('click', async () => {
 
   const owner = els.repoOwner.value.trim();
   const repo = els.repoName.value.trim();
-  const maxFiles = parseInt(els.maxFiles.value, 10) || 15;
-  const maxChars = parseInt(els.maxChars.value, 10) || 5000;
+  const maxFiles = parseInt(els.maxFiles.value, 10);
+  const maxChars = parseInt(els.maxChars.value, 10);
+  const geminiModel = normalizeGeminiModel(els.geminiModel?.value);
+
+  if (els.geminiModel) {
+    els.geminiModel.value = geminiModel;
+  }
 
   for (const pr of PRS) {
     try {
-      const files = await fetchPRFiles(owner, repo, pr.number, maxFiles);
-      const prepared = prepareFileDiffs(files, maxChars);
-      const aiReview = await callGeminiReview(pr.number, pr.title, prepared);
-      REVIEW_RESULTS[pr.number] = {
-        raw: aiReview,
-        parsed: parseGeminiResponse(aiReview)
-      };
-      renderReview(pr.number);
-    } catch (e) {
-      REVIEW_RESULTS[pr.number] = { error: e.message };
-      renderReview(pr.number);
+      const review = await runMultiAgentReview({
+        repoOwner: owner,
+        repoName: repo,
+        prNumber: pr.number,
+        geminiModel,
+        maxFiles,
+        maxDiffChars: maxChars,
+      });
+      REVIEW_RESULTS[pr.number] = { data: review };
+    } catch (error) {
+      REVIEW_RESULTS[pr.number] = { error: error?.message || 'Review failed' };
     }
+    renderReview(pr.number);
   }
 
   setLoading(els.btnReview, els.ldrReview, false);
 });
 
-async function fetchPRFiles(owner, repo, number, maxFiles) {
-  const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`;
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': `token ${els.ghToken.value.trim()}`,
-      'Accept': 'application/vnd.github+json'
-    }
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Failed to fetch files for PR #${number}: ${txt}`);
-  }
-  const data = await res.json();
-  // Each file object contains: filename, patch (diff), additions, deletions
-  return data.slice(0, maxFiles);
-}
+async function runMultiAgentReview({
+  repoOwner,
+  repoName,
+  prNumber,
+  geminiModel,
+  maxFiles,
+  maxDiffChars,
+}) {
+  const githubToken = els.ghToken.value.trim();
+  const geminiKey = els.geminiKey.value.trim();
 
-function prepareFileDiffs(files, maxChars) {
-  // Truncate patches to avoid excessively large prompts
-  return files.map(f => {
-    let patch = f.patch || '';
-    if (patch.length > maxChars) {
-      patch = patch.slice(0, maxChars) + '\n... [TRUNCATED] ...';
-    }
-    return {
-      filename: f.filename,
-      patch,
-      additions: f.additions,
-      deletions: f.deletions
-    };
-  });
-}
-
-async function callGeminiReview(prNumber, prTitle, fileDiffs) {
-  const apiKey = els.geminiKey.value.trim();
-  if (!apiKey) throw new Error('Gemini API key missing.');
-
-  const model = normalizeGeminiModel(els.geminiModel?.value);
-  if (els.geminiModel) {
-    els.geminiModel.value = model;
+  if (!githubToken || !geminiKey) {
+    throw new Error('Missing credentials for GitHub or Gemini.');
   }
 
-  // Structured prompt instructions
-  const systemInstructions = `
-You are an expert senior software engineer performing a code review.
-Return JSON ONLY with this shape:
-{
-  "pr_summary": "string",
-  "comments": [
-    {
-      "filename": "string",
-      "line_hint": "string",
-      "issue": "concise description",
-      "recommendation": "clear actionable fix",
-      "suggested_code": "optional short code snippet showing the fix"
-    }
-  ]
-}
-Rules:
-- Be specific.
-- Group similar issues separately.
-- suggested_code must be minimal (only changed lines).
-- Do not include backticks or markdown fences.
-If no issues: set comments to an empty array.
-`;
-
-  const userContent = `
-Repository Pull Request #${prNumber}: ${prTitle}
-Changed Files (possibly truncated):
-${fileDiffs.map(f => `
-FILE: ${f.filename}
-ADDITIONS: ${f.additions}, DELETIONS: ${f.deletions}
-DIFF:
-${f.patch}
-`).join('\n')}
-`;
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const body = {
-    systemInstruction: {
-      role: "system",
-      parts: [{ text: systemInstructions.trim() }]
-    },
-    contents: [
-      { role: "user", parts: [{ text: userContent }] }
-    ],
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 4096,
-      responseMimeType: "application/json"
-    }
+  const payload = {
+    github_token: githubToken,
+    gemini_api_key: geminiKey,
+    repo_owner: repoOwner,
+    repo_name: repoName,
+    pr_number: prNumber,
   };
 
-  const res = await fetch(endpoint, {
+  if (geminiModel) payload.gemini_model = geminiModel;
+  if (Number.isFinite(maxFiles) && maxFiles > 0) payload.max_files = maxFiles;
+  if (Number.isFinite(maxDiffChars) && maxDiffChars > 0) payload.max_diff_chars = maxDiffChars;
+
+  const res = await fetch('/api/review', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(payload),
   });
 
+  const responseText = await res.text();
+  let data;
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText);
+    } catch (err) {
+      if (res.ok) {
+        throw new Error('Received non-JSON response from review service.');
+      }
+    }
+  }
+
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Gemini API error: ${res.status} ${txt}`);
+    const detail = data?.detail || data?.message || responseText || `Review failed with status ${res.status}`;
+    throw new Error(detail);
   }
 
-  const data = await res.json();
-  const candidate = data?.candidates?.[0];
-
-  if (!candidate) {
-    const blockReason = data?.promptFeedback?.blockReason;
-    throw new Error(blockReason ? `Gemini returned no candidates (block reason: ${blockReason})` : 'Gemini returned no candidates.');
+  if (!data || typeof data !== 'object') {
+    throw new Error('Empty response from review service.');
   }
 
-  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
-  const text = parts
-    .map(part => (typeof part?.text === 'string' ? part.text : '')
-      .trim())
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-
-  if (!text) {
-    const finish = candidate.finishReason || 'unknown';
-    const blockReason = data?.promptFeedback?.blockReason;
-    const reasons = blockReason ? ` Block reason: ${blockReason}.` : '';
-    const mitigation = finish === 'MAX_TOKENS'
-      ? ' Try lowering "Max Files Per PR" / "Max Diff Chars Per File" or switch to a more capable Gemini model.'
-      : '';
-    throw new Error(`Empty AI response (finish reason: ${finish}).${reasons}${mitigation}`.trim());
-  }
-
-  return text;
-}
-
-function parseGeminiResponse(raw) {
-  // Try to parse JSON. If it fails, return raw fallback.
-  try {
-    // Some models may wrap JSON in markdown. Strip fences.
-    const cleaned = raw
-      .replace(/```json/gi,'')
-      .replace(/```/g,'')
-      .trim();
-    const obj = JSON.parse(cleaned);
-    if (!obj || typeof obj !== 'object') return { error: 'Malformed JSON', raw };
-    if (!Array.isArray(obj.comments)) obj.comments = [];
-    return obj;
-  } catch (e) {
-    return { error: 'Failed to parse JSON', raw };
-  }
+  return data;
 }
 
 function renderReview(prNumber) {
@@ -693,10 +635,15 @@ function renderReview(prNumber) {
   const prMeta = PRS.find(p => p.number === prNumber);
   const baseId = `review-pr-${prNumber}`;
 
-  // Build card
   let html = `<div class="review-item" id="${baseId}">
     <h3>Review – PR #${prNumber} (${sanitize(prMeta?.title)})</h3>
   `;
+
+  if (!result) {
+    html += '<div class="error-box">Review not found.</div></div>';
+    appendOrReplace(baseId, html);
+    return;
+  }
 
   if (result.error) {
     html += `<div class="error-box">${sanitize(result.error)}</div>`;
@@ -705,37 +652,41 @@ function renderReview(prNumber) {
     return;
   }
 
-  const parsed = result.parsed;
-  if (parsed?.error) {
-    html += `<div class="error-box">Parser issue: ${sanitize(parsed.error)}\nRaw:\n${sanitize(result.raw.slice(0, 800))}${result.raw.length > 800 ? '...' : ''}</div>`;
-    html += '</div>';
+  const review = result.data || {};
+  const metadata = review.metadata || {};
+  const sections = Array.isArray(review.sections) ? review.sections : [];
+
+  const metaLines = [];
+  if (Number.isFinite(metadata.files_analyzed)) {
+    metaLines.push(`Files analyzed: ${metadata.files_analyzed}`);
+  }
+  if (Number.isFinite(metadata.files_available)) {
+    metaLines.push(`Files available: ${metadata.files_available}`);
+  }
+  if (Array.isArray(metadata.agents_run) && metadata.agents_run.length) {
+    metaLines.push(`Agents: ${metadata.agents_run.join(', ')}`);
+  }
+
+  if (metaLines.length) {
+    html += `<div class="success-box">${metaLines.map(line => sanitize(line)).join('<br />')}</div>`;
+  }
+
+  if (!sections.length) {
+    html += '<div class="success-box">Review completed but no detailed agent output was returned.</div></div>';
     appendOrReplace(baseId, html);
     return;
   }
 
-  html += `<div class="success-box">
-    <strong>PR Summary:</strong> ${sanitize(parsed.pr_summary || 'No summary')}
-  </div>`;
-
-  if (!parsed.comments.length) {
-    html += `<div class="success-box">No issues detected.</div></div>`;
-    appendOrReplace(baseId, html);
-    return;
-  }
-
-  html += `<div class="review-comments">`;
-  parsed.comments.forEach((c, idx) => {
-    html += `<div class="comment-card">
-      <h4>Issue ${idx + 1}: ${sanitize(c.filename)}</h4>
-      <div class="meta-line">
-        <span class="badge">Line</span><span>${sanitize(c.line_hint || 'N/A')}</span>
-      </div>
-      <div><strong>Issue:</strong> ${sanitize(c.issue || 'No description')}</div>
-      <div><strong>Recommendation:</strong> ${sanitize(c.recommendation || 'No recommendation')}</div>
-      ${c.suggested_code ? `<div class="suggestion">${sanitize(c.suggested_code)}</div>` : ''}
+  html += '<div class="review-comments">';
+  sections.forEach(section => {
+    const label = section.label || section.key || 'Agent Output';
+    const output = section.output || 'No output provided.';
+    html += `<div class="section-card">
+      <h4>${sanitize(label)}</h4>
+      <pre class="section-output">${sanitize(output)}</pre>
     </div>`;
   });
-  html += `</div></div>`;
+  html += '</div></div>';
   appendOrReplace(baseId, html);
 }
 

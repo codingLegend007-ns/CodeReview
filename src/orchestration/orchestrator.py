@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import textwrap
+
 from typing import Any, Dict, List, Optional
 
 try:
@@ -135,10 +137,12 @@ class ReviewOrchestrator:
 			task = task_factory(agent, pull_request, significant_changes)
 			output = self._execute_task(agent, task)
 			intermediate_results[key] = output
+			polished_output = self._polish_output(label, output)
 			sections.append({
 				"key": key,
 				"label": label,
-				"output": output,
+				"output": polished_output,
+				"raw_output": output,
 			})
 
 		suggestion_task = create_suggestion_generation_task(
@@ -147,10 +151,12 @@ class ReviewOrchestrator:
 		)
 		suggestion_output = self._execute_task(agents["suggestion"], suggestion_task)
 		intermediate_results["suggestions"] = suggestion_output
+		polished_suggestion = self._polish_output("Improvement Suggestions", suggestion_output)
 		sections.append({
 			"key": "suggestions",
 			"label": "Improvement Suggestions",
-			"output": suggestion_output,
+			"output": polished_suggestion,
+			"raw_output": suggestion_output,
 		})
 
 		return {
@@ -199,3 +205,50 @@ class ReviewOrchestrator:
 					return str(result[key])
 
 		return str(result)
+
+	def _polish_output(self, label: str, content: str) -> str:
+		"""Rewrite agent output into clear, structured, and actionable guidance."""
+
+		if not content or not content.strip():
+			return (
+				"Summary:\n• No findings reported.\n\n"
+				"Key Findings:\n• None.\n\n"
+				"Fix Suggestions:\n• None."
+			)
+
+		trimmed = content.strip()
+		if len(trimmed) > 6000:
+			trimmed = textwrap.shorten(trimmed, width=6000, placeholder="... [content truncated]")
+
+		prompt = (
+			"You are preparing reviewer notes for a pull request. Rewrite the following "
+			f"{label.lower()} findings so they are easy to scan by a developer during code review. "
+			"Follow these rules:\n"
+			"1. Start with a one-sentence summary.\n"
+			"2. Provide a 'Key Findings' section with bullet points; each bullet must start with the file path (if known), followed by the class or function name and primary line number in the format `• path/ClassName (line 123): issue`.\n"
+			"3. Provide a 'Fix Suggestions' section whose bullets mirror the same location references and give concrete, actionable steps or code changes.\n"
+			"4. Keep language concise, direct, and accessible to any engineer.\n"
+			"5. If context lacks a class or line, state 'Unknown'.\n"
+			"6. If there are no findings or fixes, write 'None'.\n"
+			"7. Keep the response under 250 words.\n"
+			"Use Markdown headings and bullet lists.\n\n"
+			"Original notes:\n"
+			f"{trimmed}"
+		)
+
+		try:
+			if hasattr(self.llm, "invoke"):
+				response = self.llm.invoke(prompt)
+				if isinstance(response, str):
+					polished_text = response
+				else:
+					polished_text = getattr(response, "content", str(response))
+			elif hasattr(self.llm, "predict"):
+				polished_text = self.llm.predict(prompt)
+			else:
+				return trimmed
+		except Exception:  # pragma: no cover - defensive fallback
+			return trimmed
+
+		polished_text = (polished_text or "").strip()
+		return polished_text if polished_text else trimmed
