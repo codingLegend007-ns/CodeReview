@@ -5,12 +5,6 @@ from typing import Optional, List
 from datetime import datetime
 from ..value_objects.severity import Severity
 
-"""
-this is just new comment for testing.
-
-New update for new PR testing.
-"""
-
 
 @dataclass
 class Issue:
@@ -29,9 +23,7 @@ class Issue:
     detected_by: str = "unknown"  # Agent that detected the issue
     confidence: float = 1.0  # Confidence score (0.0 to 1.0)
     created_at: datetime = field(default_factory=datetime.utcnow)
-    user_name: str = "hello.harta"
-    password: str = "hello@123"
-    
+     
     def __post_init__(self):
         """Validate issue data after initialization."""
         if not 0.0 <= self.confidence <= 1.0:
