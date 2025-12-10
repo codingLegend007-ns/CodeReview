@@ -18,6 +18,8 @@ APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 UI_DIR = PROJECT_ROOT / "ui"
 HOME_PAGE = UI_DIR / "home.html"
+HOME_CSS = UI_DIR / "home.css"
+HOME_JS = UI_DIR / "home.js"
 
 app = FastAPI(
     title="AI Code Review Frontend",
@@ -62,6 +64,22 @@ async def read_home() -> FileResponse:
     if not HOME_PAGE.exists():
         raise HTTPException(status_code=500, detail="UI home.html file not found")
     return FileResponse(HOME_PAGE)
+
+
+@app.get("/home.css", include_in_schema=False)
+async def read_home_css() -> FileResponse:
+    """Serve the extracted stylesheet for the frontend."""
+    if not HOME_CSS.exists():
+        raise HTTPException(status_code=500, detail="UI home.css file not found")
+    return FileResponse(HOME_CSS, media_type="text/css")
+
+
+@app.get("/home.js", include_in_schema=False)
+async def read_home_js() -> FileResponse:
+    """Serve the extracted JavaScript bundle for the frontend."""
+    if not HOME_JS.exists():
+        raise HTTPException(status_code=500, detail="UI home.js file not found")
+    return FileResponse(HOME_JS, media_type="application/javascript")
 
 
 @app.get("/health")

@@ -36,6 +36,50 @@ def _build_allowed_files_text(code_changes: List[CodeChange], *, limit: int = 12
         f"{file_lines}"
     )
 
+
+def _build_diff_context(
+    code_changes: List[CodeChange],
+    *,
+    max_files: int = 12,
+    max_total_chars: int = 10000,
+    max_patch_chars: int = 1500,
+) -> str:
+    """Construct a diff-focused context string limited to PR changes."""
+
+    if not code_changes:
+        return "Diff context unavailable (no code changes were supplied)."
+
+    sections: List[str] = []
+    total_chars = 0
+
+    for change in code_changes[:max_files]:
+        filename = getattr(change, "filename", "<unknown>")
+        status = getattr(change, "status", None)
+        status_text = getattr(status, "value", str(status) if status else "unknown")
+        patch = getattr(change, "patch", None)
+
+        if patch:
+            trimmed = patch.strip()
+            if len(trimmed) > max_patch_chars:
+                trimmed = trimmed[:max_patch_chars].rstrip() + "\n... [diff truncated]"
+            diff_block = f"```diff\n{trimmed}\n```"
+        else:
+            diff_block = "Diff unavailable (binary file or patch not provided)."
+
+        section = (
+            f"File: {filename}\n"
+            f"Status: {status_text}\n"
+            f"{diff_block}"
+        )
+        section_length = len(section)
+        if total_chars + section_length > max_total_chars:
+            sections.append("... Additional file diffs omitted to stay within limits.")
+            break
+        sections.append(section)
+        total_chars += section_length
+
+    return "\n\n".join(sections)
+
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from crewai import Task as CrewTaskType
 else:
@@ -70,6 +114,12 @@ def create_code_review_task(
     Files changed: {len(code_changes)}
 
     {allowed_files_text}
+
+    Focus strictly on the modified lines included in these diff hunks. Do not comment on
+    unchanged portions of any file or reference code outside the pull request.
+
+    Diff context:
+    {_build_diff_context(code_changes)}
     
     Analyze the code changes for:
     1. Code quality and maintainability
@@ -135,7 +185,13 @@ def create_security_analysis_task(
     8. Input validation issues
     {allowed_files_text}
 
-    For every finding, write one or two sentences that include the file path (from the allowed list), class or function name, relevant line number, impact, and reference to the applicable security standard (e.g., OWASP Top 10, company policy). Avoid bullet points.
+    Focus strictly on the diff hunks provided below. Ignore unchanged code and do not
+    reference files outside the pull request.
+
+    Diff context:
+    {_build_diff_context(code_changes)}
+
+    For every finding, write one or two sentences that include the file path (from the allowed list), class or function name, relevant line number in the diff, impact, and reference to the applicable security standard (e.g., OWASP Top 10, company policy). Avoid bullet points.
     """
     
     expected_output = """
@@ -178,7 +234,13 @@ def create_performance_analysis_task(
     6. Missing caching opportunities
     {allowed_files_text}
 
-    Document every issue with one or two clear sentences that provide the file path (choose from the allowed list), class or function name, precise line number, performance impact, and any applicable engineering guideline (e.g., big-O expectations, scalability standards). Do not use bullet points.
+    Focus strictly on the diff hunks provided below. Ignore unchanged code and do not
+    reference files outside the pull request.
+
+    Diff context:
+    {_build_diff_context(code_changes)}
+
+    Document every issue with one or two clear sentences that provide the file path (choose from the allowed list), class or function name, precise line number from the diff, performance impact, and any applicable engineering guideline (e.g., big-O expectations, scalability standards). Do not use bullet points.
     """
     
     expected_output = """

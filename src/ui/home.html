@@ -4,355 +4,24 @@
 <meta charset="UTF-8" />
 <title>AI GitHub PR Code Review – Gemini Powered</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-:root {
-  --bg: #0f1115;
-  --panel: #1c1f24;
-  --panel-alt: #22262c;
-  --border: #2d333b;
-  --accent: #4ea1ff;
-  --accent-alt: #2b8de2;
-  --danger: #ff4d4d;
-  --warn: #ffbe3d;
-  --ok: #42c980;
-  --font-stack: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
-  --shadow: 0 4px 14px rgba(0,0,0,0.4);
-  --text: #e5e9ef;
-  --text-dim: #9aa1ab;
-  --code-bg: #15171b;
-  --mono: "Consolas","SFMono-Regular","Courier New",monospace;
-}
-* { box-sizing: border-box; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-stack);
-  margin: 0;
-  line-height: 1.5;
-}
-h1,h2,h3 { font-weight: 600; letter-spacing: .5px; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-main {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 2rem 1.25rem 5rem;
-}
-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-}
-header h1 { margin: 0; font-size: clamp(1.8rem,5vw,2.4rem); }
-header p { margin: 0; color: var(--text-dim); max-width: 780px; }
-
-.grid-setup {
-  display: grid;
-  gap: 1.25rem;
-  grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
-  margin-bottom: 1rem;
-}
-.card {
-  background: var(--panel);
-  padding: 1rem 1.1rem 1.2rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: .75rem;
-  position: relative;
-}
-.card h2, .card h3 { margin: 0 0 .25rem; font-size: 1.05rem; letter-spacing: .3px; }
-label {
-  display: flex;
-  flex-direction: column;
-  font-size: .8rem;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  gap: .4rem;
-}
-input {
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  padding: .55rem .7rem;
-  border-radius: var(--radius-sm);
-  font-size: .95rem;
-  color: var(--text);
-  font-family: var(--mono);
-}
-input:focus {
-  outline: 2px solid var(--accent-alt);
-  border-color: var(--accent-alt);
-}
-button {
-  cursor: pointer;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-  padding: .7rem 1.1rem;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: .95rem;
-  letter-spacing: .5px;
-  transition: background .18s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: .5rem;
-}
-button:hover { background: var(--accent-alt); }
-button:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-}
-.actions {
-  display: flex;
-  gap: .75rem;
-  flex-wrap: wrap;
-  margin-top: .5rem;
-}
-.status-line {
-  font-size: .8rem;
-  color: var(--text-dim);
-  display: flex;
-  gap: .6rem;
-  flex-wrap: wrap;
-}
-.status-chip {
-  background: var(--panel-alt);
-  padding: .35rem .6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-}
-
-#prList, #reviews {
-  margin-top: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-}
-
-.pr-item, .review-item {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: .9rem .95rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: .6rem;
-  position: relative;
-}
-
-.pr-item h3, .review-item h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: baseline;
-  gap: .5rem;
-}
-.meta-line {
-  font-size: .7rem;
-  color: var(--text-dim);
-  letter-spacing: .5px;
-  display: flex;
-  gap: .75rem;
-  flex-wrap: wrap;
-}
-
-.review-comments {
-  display: flex;
-  flex-direction: column;
-  gap: .75rem;
-}
-
-.comment-card {
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  padding: .65rem .75rem .75rem;
-  border-radius: var(--radius-sm);
-  display: flex;
-  flex-direction: column;
-  gap: .5rem;
-}
-
-.comment-card h4 {
-  margin: 0;
-  font-size: .9rem;
-  color: var(--accent);
-  font-weight: 600;
-  letter-spacing: .4px;
-}
-
-.section-card {
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: .7rem .8rem .85rem;
-  display: flex;
-  flex-direction: column;
-  gap: .55rem;
-}
-
-.section-card h4 {
-  margin: 0;
-  font-size: .95rem;
-  color: var(--accent);
-  letter-spacing: .45px;
-}
-
-.section-output {
-  display: flex;
-  flex-direction: column;
-  gap: .75rem;
-  margin: 0;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: .75rem .8rem;
-}
-
-.agent-group {
-  display: flex;
-  flex-direction: column;
-  gap: .45rem;
-}
-
-.agent-header {
-  font-weight: 600;
-  color: var(--accent);
-  font-size: .85rem;
-  letter-spacing: .35px;
-}
-
-.agent-divider {
-  border: 0;
-  border-top: 1px dashed var(--border);
-  margin: .6rem 0;
-}
-
-.review-line {
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: .5rem .6rem;
-  display: flex;
-  flex-direction: column;
-  gap: .25rem;
-  font-size: .78rem;
-  line-height: 1.45;
-}
-
-.line-label {
-  font-size: .7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .4px;
-  color: var(--text-dim);
-}
-
-.line-issue {
-  color: var(--text);
-}
-
-.line-fix {
-  color: var(--accent);
-  font-weight: 500;
-}
-
-.line-fix span {
-  color: var(--text-dim);
-  font-weight: 700;
-  margin-right: .35rem;
-}
-
-.agent-empty {
-  color: var(--text-dim);
-  font-size: .75rem;
-}
-
-.badge {
-  padding: .2rem .45rem;
-  background: var(--accent-alt);
-  color: #fff;
-  font-size: .65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  border-radius: var(--radius-sm);
-  letter-spacing: .5px;
-}
-
-.suggestion {
-  font-family: var(--mono);
-  font-size: .75rem;
-  background: var(--code-bg);
-  padding: .55rem .65rem;
-  border-radius: var(--radius-sm);
-  overflow-x: auto;
-  line-height: 1.35;
-  border: 1px solid var(--border);
-  white-space: pre-wrap;
-}
-
-.error-box {
-  border-left: 4px solid var(--danger);
-  background: #2a1c1e;
-  padding: .75rem .9rem;
-  border-radius: var(--radius-sm);
-  font-size: .8rem;
-  line-height: 1.4;
-  color: #ffbaba;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.success-box {
-  border-left: 4px solid var(--ok);
-  background: #1e2a24;
-  padding: .7rem .85rem;
-  border-radius: var(--radius-sm);
-  font-size: .75rem;
-  color: #d2ffe9;
-}
-
-.loader {
-  width: 16px;
-  height: 16px;
-  border: 3px solid var(--panel-alt);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin .8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-footer {
-  margin-top: 3rem;
-  padding: 2.5rem 1rem 3.5rem;
-  text-align: center;
-  font-size: .7rem;
-  color: var(--text-dim);
-  border-top: 1px solid var(--border);
-}
-footer a { color: var(--accent); }
-
-@media (max-width: 680px) {
-  .actions { flex-direction: column; }
-  button { width: 100%; justify-content: center; }
-}
-</style>
+<link rel="stylesheet" href="/home.css" />
 </head>
 <body>
 <main>
   <header>
-    <h1>AI GitHub Pull Request Review</h1>
-  <p>Fetch open PRs from a repository and trigger a multi-agent Gemini review (code, security, performance, and improvement suggestions). Provide your GitHub token (with repo read access) and a Gemini API key. Everything runs locally—keep your keys private.</p>
+    <div class="header-content">
+      <div class="header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>AI-Powered 1-Click Code Review Platform</h1>
+        <p>Enterprise-grade intelligent multi-agent system for comprehensive GitHub pull request analysis. Leverage advanced AI models to identify code quality issues, security vulnerabilities, performance bottlenecks, and receive actionable improvement recommendations—streamlined into a single automated workflow.</p>
+      </div>
+    </div>
   </header>
 
   <!-- Configuration -->
@@ -399,13 +68,23 @@ footer a { color: var(--accent); }
     <div class="card">
       <h2>Actions</h2>
       <div class="actions">
-        <button id="btnValidate" title="Check tokens">Validate Keys</button>
+        <button id="btnValidate" title="Check tokens">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M13.5 4L6 11.5L2.5 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Validate Keys
+        </button>
         <button id="btnFetch" disabled title="Fetch open PRs from GitHub">
           <span class="loader" style="display:none" id="ldrFetch"></span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" id="fetchIcon">
+            <path d="M8 1V3M8 13V15M15 8H13M3 8H1M12.657 12.657L11.243 11.243M4.757 4.757L3.343 3.343M12.657 3.343L11.243 4.757M4.757 11.243L3.343 12.657" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
           Fetch Pull Requests
         </button>
         <button id="btnReview" disabled title="Perform AI review across all listed PRs">
-          <span class="loader" style="display:none" id="ldrReview"></span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 1L10 5.5L14.5 6L11 9.5L12 14L8 11.5L4 14L5 9.5L1.5 6L6 5.5L8 1Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
           Perform Code Review
         </button>
       </div>
@@ -422,438 +101,53 @@ footer a { color: var(--accent); }
 
   <!-- Review Results -->
   <section id="reviews" aria-label="Review Results">
-    <!-- Dynamic content -->
+    <h2>Review Results</h2>
+    <div class="review-spinner" id="reviewSpinner" aria-hidden="true">
+      <div class="spinner-icon" role="status" aria-live="polite" aria-label="Review in progress"></div>
+      <div class="spinner-copy">
+        <strong data-spinner-title>Review in progress…</strong>
+        <span data-spinner-subtitle>Hang tight while we analyze the pull requests.</span>
+      </div>
+    </div>
+    <div id="reviewsContent" class="reviews-content">
+      <div class="success-box" data-review-placeholder="true">No reviews yet. Run a code review to see AI findings.</div>
+    </div>
   </section>
 
   <footer>
-  <p>⚠ Internal Demo: Do not expose secrets publicly. Backend FastAPI stores nothing and forwards tokens directly to GitHub/Gemini for the current request only.</p>
+    <div class="footer-content">
+      <p>
+        <strong>🔒 Security Notice:</strong> This is a development tool. Your API keys are used only for the current request and are never stored. 
+        Keep your tokens private and secure.
+      </p>
+      <div class="footer-links">
+        <span class="footer-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Powered by CrewAI
+        </span>
+        <span class="footer-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Google Gemini AI
+        </span>
+        <span class="footer-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 19C4 19 4 15 4 15C4 15 5 14 6 13M15 5C20 5 20 9 20 9C20 9 19 10 18 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 3C7 3 7 7 7 7L12 12L17 7C17 7 17 3 12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 21C17 21 17 17 17 17L12 12L7 17C7 17 7 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          GitHub Integration
+        </span>
+      </div>
+    </div>
   </footer>
 </main>
 
-<script>
-/* =========================
-   Utility & State
-   ========================= */
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_MODEL_ALIASES = {
-  'gemini-1.5-flash': 'gemini-2.5-flash',
-  'gemini-1.5-flash-latest': 'gemini-2.5-flash',
-  'gemini-1.5-pro': 'gemini-2.0-flash',
-  'gemini-1.5-pro-latest': 'gemini-2.0-flash',
-  '1.5-flash': 'gemini-2.5-flash',
-  '1.5-pro': 'gemini-2.0-flash',
-  'gemini-2.0-flash-latest': 'gemini-2.0-flash',
-  'gemini-flash-latest': 'gemini-2.5-flash',
-  'gemini-flash': 'gemini-2.5-flash',
-  'flash': 'gemini-2.5-flash',
-  'pro': 'gemini-2.0-flash',
-};
-
-const els = {
-  ghToken: document.getElementById('ghToken'),
-  geminiKey: document.getElementById('geminiKey'),
-  geminiModel: document.getElementById('geminiModel'),
-  repoOwner: document.getElementById('repoOwner'),
-  repoName: document.getElementById('repoName'),
-  maxFiles: document.getElementById('maxFiles'),
-  maxChars: document.getElementById('maxChars'),
-  btnValidate: document.getElementById('btnValidate'),
-  btnFetch: document.getElementById('btnFetch'),
-  btnReview: document.getElementById('btnReview'),
-  credStatus: document.getElementById('credStatus'),
-  prList: document.getElementById('prList'),
-  reviews: document.getElementById('reviews'),
-  ldrFetch: document.getElementById('ldrFetch'),
-  ldrReview: document.getElementById('ldrReview'),
-};
-
-let PRS = [];             // Fetched PR metadata
-let REVIEW_RESULTS = {};  // Map PR number -> backend review response
-
-if (els.geminiModel && !els.geminiModel.value) {
-  els.geminiModel.value = DEFAULT_GEMINI_MODEL;
-}
-
-function sanitize(str) {
-  // Basic sanitation to avoid injection into HTML
-  return (str ?? '')
-    .replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-}
-
-function groupAgentOutput(output) {
-  const groups = [];
-  let current = null;
-
-  String(output ?? '')
-    .split(/\r?\n/)
-    .forEach(rawLine => {
-      const line = rawLine.trim();
-      if (!line) return;
-
-      const headerMatch = line.match(/^\*\*(.+?)\*\*$/);
-      if (headerMatch) {
-        const header = headerMatch[1].trim() || 'General';
-        current = { header, items: [] };
-        groups.push(current);
-        return;
-      }
-
-      if (!current) {
-        current = { header: 'General', items: [] };
-        groups.push(current);
-      }
-
-      current.items.push(line);
-    });
-
-  return groups;
-}
-
-function formatAgentLine(line) {
-  const trimmed = line.trim();
-  const lower = trimmed.toLowerCase();
-  const fixIndex = lower.indexOf('fix:');
-
-  let issuePart = trimmed;
-  let fixPart = '';
-
-  if (fixIndex !== -1) {
-    issuePart = trimmed.slice(0, fixIndex).trim();
-    fixPart = trimmed.slice(fixIndex + 4).trim();
-  }
-
-  let lineLabel = 'Line ?';
-  let issueText = issuePart;
-
-  const lineMatch = issuePart.match(/^Line\s+([^:]+):\s*(.*)$/i);
-  if (lineMatch) {
-    lineLabel = `Line ${lineMatch[1].trim() || '?'}`;
-    issueText = lineMatch[2].trim() || 'Issue details missing.';
-  } else if (/^Unknown/i.test(issuePart)) {
-    lineLabel = 'Line Unknown';
-    issueText = issuePart.replace(/^Unknown\s*:?\s*/i, '').trim() || 'Issue details missing.';
-  }
-
-  if (!issueText) {
-    issueText = 'Issue details missing.';
-  }
-
-  return {
-    lineLabel,
-    issueText,
-    fixText: fixPart,
-  };
-}
-
-function renderAgentOutput(output) {
-  const groups = groupAgentOutput(output);
-  if (!groups.length) {
-    return `<p class="agent-empty">${sanitize(output || 'No output provided.')}</p>`;
-  }
-
-  const renderedGroups = groups.map(group => {
-    const headerHtml = `<div class="agent-header">${sanitize(group.header || 'General')}</div>`;
-    const itemsHtml = (group.items && group.items.length)
-      ? group.items.map(item => {
-          const parsed = formatAgentLine(item);
-          const lineLabel = sanitize(parsed.lineLabel);
-          const issue = sanitize(parsed.issueText);
-          const fix = parsed.fixText
-            ? `<div class="line-fix"><span>Fix:</span> ${sanitize(parsed.fixText)}</div>`
-            : '';
-          return `<div class="review-line"><div class="line-label">${lineLabel}</div><div class="line-issue">${issue}</div>${fix}</div>`;
-        }).join('')
-      : '<div class="review-line agent-empty">No findings reported.</div>';
-
-    return `<div class="agent-group">${headerHtml}${itemsHtml}</div>`;
-  });
-
-  return renderedGroups.join('<hr class="agent-divider" />');
-}
-
-function normalizeGeminiModel(modelName) {
-  const trimmed = (modelName || '').trim();
-  if (!trimmed) return DEFAULT_GEMINI_MODEL;
-
-  const withoutPrefix = trimmed.replace(/^models\//i, '');
-  const lower = withoutPrefix.toLowerCase();
-
-  if (GEMINI_MODEL_ALIASES[lower]) {
-    return GEMINI_MODEL_ALIASES[lower];
-  }
-
-  if (lower.startsWith('gemini-1.5-') && !lower.endsWith('-latest')) {
-    return `${lower}-latest`;
-  }
-
-  return lower;
-}
-
-function setLoading(elButton, elLoader, loading) {
-  elButton.disabled = loading;
-  elLoader.style.display = loading ? 'inline-block' : 'none';
-}
-
-function enableActions() {
-  const tokensValid = !!els.ghToken.value && !!els.geminiKey.value;
-  els.btnFetch.disabled = !tokensValid;
-  // Review only enabled after PRs fetched
-  els.btnReview.disabled = !(tokensValid && PRS.length > 0);
-}
-
-/* =========================
-   Validation
-   ========================= */
-els.btnValidate.addEventListener('click', () => {
-  const gh = els.ghToken.value.trim();
-  const gm = els.geminiKey.value.trim();
-  if (!gh || !gm) {
-    els.credStatus.textContent = 'Status: Missing tokens';
-    els.credStatus.style.color = '#ffb347';
-  } else {
-    els.credStatus.textContent = 'Status: OK';
-    els.credStatus.style.color = '#42c980';
-  }
-  enableActions();
-});
-
-/* =========================
-   Fetch PRs
-   ========================= */
-els.btnFetch.addEventListener('click', async () => {
-  const owner = els.repoOwner.value.trim();
-  const repo = els.repoName.value.trim();
-  if (!owner || !repo) {
-    alert('Please enter owner and repository name.');
-    return;
-  }
-  setLoading(els.btnFetch, els.ldrFetch, true);
-  els.prList.innerHTML = '';
-  els.reviews.innerHTML = '';
-  REVIEW_RESULTS = {};
-  PRS = [];
-
-  try {
-    const url = `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&per_page=50`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `token ${els.ghToken.value.trim()}`,
-        'Accept': 'application/vnd.github+json'
-      }
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`GitHub API error ${res.status}: ${txt}`);
-    }
-    const data = await res.json();
-    PRS = data.map(pr => ({
-      number: pr.number,
-      title: pr.title,
-      created_at: pr.created_at,
-      user: pr.user?.login,
-      url: pr.html_url,
-    }));
-    renderPRs();
-    enableActions();
-  } catch (e) {
-    els.prList.innerHTML = `<div class="error-box">Failed to fetch PRs:\n${sanitize(e.message)}</div>`;
-  } finally {
-    setLoading(els.btnFetch, els.ldrFetch, false);
-  }
-});
-
-function renderPRs() {
-  if (!PRS.length) {
-    els.prList.innerHTML = `<div class="pr-item"><h3>No open pull requests.</h3></div>`;
-    return;
-  }
-  els.prList.innerHTML = '<h2>Open Pull Requests</h2>' + PRS.map(pr => `
-    <div class="pr-item" data-pr="${pr.number}">
-      <h3>#${pr.number} – ${sanitize(pr.title)}</h3>
-      <div class="meta-line">
-        <span>Opened: ${new Date(pr.created_at).toLocaleString()}</span>
-        <span>By: ${sanitize(pr.user)}</span>
-        <a href="${sanitize(pr.url)}" target="_blank" rel="noopener">View on GitHub ↗</a>
-      </div>
-    </div>
-  `).join('');
-}
-
-/* =========================
-   Perform AI Code Review
-   ========================= */
-els.btnReview.addEventListener('click', async () => {
-  if (!PRS.length) {
-    alert('No PRs to review.');
-    return;
-  }
-  setLoading(els.btnReview, els.ldrReview, true);
-  els.reviews.innerHTML = '<h2>Review Results</h2><div class="success-box">Review in progress – please wait...</div>';
-  REVIEW_RESULTS = {};
-
-  const owner = els.repoOwner.value.trim();
-  const repo = els.repoName.value.trim();
-  const maxFiles = parseInt(els.maxFiles.value, 10);
-  const maxChars = parseInt(els.maxChars.value, 10);
-  const geminiModel = normalizeGeminiModel(els.geminiModel?.value);
-
-  if (els.geminiModel) {
-    els.geminiModel.value = geminiModel;
-  }
-
-  for (const pr of PRS) {
-    try {
-      const review = await runMultiAgentReview({
-        repoOwner: owner,
-        repoName: repo,
-        prNumber: pr.number,
-        geminiModel,
-        maxFiles,
-        maxDiffChars: maxChars,
-      });
-      REVIEW_RESULTS[pr.number] = { data: review };
-    } catch (error) {
-      REVIEW_RESULTS[pr.number] = { error: error?.message || 'Review failed' };
-    }
-    renderReview(pr.number);
-  }
-
-  setLoading(els.btnReview, els.ldrReview, false);
-});
-
-async function runMultiAgentReview({
-  repoOwner,
-  repoName,
-  prNumber,
-  geminiModel,
-  maxFiles,
-  maxDiffChars,
-}) {
-  const githubToken = els.ghToken.value.trim();
-  const geminiKey = els.geminiKey.value.trim();
-
-  if (!githubToken || !geminiKey) {
-    throw new Error('Missing credentials for GitHub or Gemini.');
-  }
-
-  const payload = {
-    github_token: githubToken,
-    gemini_api_key: geminiKey,
-    repo_owner: repoOwner,
-    repo_name: repoName,
-    pr_number: prNumber,
-  };
-
-  if (geminiModel) payload.gemini_model = geminiModel;
-  if (Number.isFinite(maxFiles) && maxFiles > 0) payload.max_files = maxFiles;
-  if (Number.isFinite(maxDiffChars) && maxDiffChars > 0) payload.max_diff_chars = maxDiffChars;
-
-  const res = await fetch('/api/review', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  const responseText = await res.text();
-  let data;
-  if (responseText) {
-    try {
-      data = JSON.parse(responseText);
-    } catch (err) {
-      if (res.ok) {
-        throw new Error('Received non-JSON response from review service.');
-      }
-    }
-  }
-
-  if (!res.ok) {
-    const detail = data?.detail || data?.message || responseText || `Review failed with status ${res.status}`;
-    throw new Error(detail);
-  }
-
-  if (!data || typeof data !== 'object') {
-    throw new Error('Empty response from review service.');
-  }
-
-  return data;
-}
-
-function renderReview(prNumber) {
-  const result = REVIEW_RESULTS[prNumber];
-  const prMeta = PRS.find(p => p.number === prNumber);
-  const baseId = `review-pr-${prNumber}`;
-
-  let html = `<div class="review-item" id="${baseId}">
-    <h3>Review – PR #${prNumber} (${sanitize(prMeta?.title)})</h3>
-  `;
-
-  if (!result) {
-    html += '<div class="error-box">Review not found.</div></div>';
-    appendOrReplace(baseId, html);
-    return;
-  }
-
-  if (result.error) {
-    html += `<div class="error-box">${sanitize(result.error)}</div>`;
-    html += '</div>';
-    appendOrReplace(baseId, html);
-    return;
-  }
-
-  const review = result.data || {};
-  const metadata = review.metadata || {};
-  const sections = Array.isArray(review.sections) ? review.sections : [];
-
-  const metaLines = [];
-  if (Number.isFinite(metadata.files_analyzed)) {
-    metaLines.push(`Files analyzed: ${metadata.files_analyzed}`);
-  }
-  if (Number.isFinite(metadata.files_available)) {
-    metaLines.push(`Files available: ${metadata.files_available}`);
-  }
-  if (Array.isArray(metadata.agents_run) && metadata.agents_run.length) {
-    metaLines.push(`Agents: ${metadata.agents_run.join(', ')}`);
-  }
-
-  if (metaLines.length) {
-    html += `<div class="success-box">${metaLines.map(line => sanitize(line)).join('<br />')}</div>`;
-  }
-
-  if (!sections.length) {
-    html += '<div class="success-box">Review completed but no detailed agent output was returned.</div></div>';
-    appendOrReplace(baseId, html);
-    return;
-  }
-
-  html += '<div class="review-comments">';
-  sections.forEach(section => {
-    const label = section.label || section.key || 'Agent Output';
-    const output = section.output || 'No output provided.';
-    html += `<div class="section-card">
-      <h4>${sanitize(label)}</h4>
-      <div class="section-output">${renderAgentOutput(output)}</div>
-    </div>`;
-  });
-  html += '</div></div>';
-  appendOrReplace(baseId, html);
-}
-
-function appendOrReplace(id, html) {
-  const existing = document.getElementById(id);
-  if (existing) {
-    existing.outerHTML = html;
-  } else {
-    if (!els.reviews.querySelector('h2')) {
-      els.reviews.innerHTML = '<h2>Review Results</h2>';
-    }
-    els.reviews.insertAdjacentHTML('beforeend', html);
-  }
-}
-
-/* Re-enable buttons when inputs change */
-['ghToken','geminiKey','geminiModel'].forEach(id => {
-  els[id].addEventListener('input', enableActions);
-});
-</script>
+<script src="/home.js" defer></script>
 </body>
 </html>
