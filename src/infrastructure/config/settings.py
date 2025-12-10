@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     github_api_url: str = Field(
         default="https://api.github.com",
         description="GitHub API base URL"
-
     )
     
     # Google Gemini Configuration
